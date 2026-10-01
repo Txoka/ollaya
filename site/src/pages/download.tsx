@@ -170,7 +170,7 @@ export function DownloadPage({ origin }: { origin: string }) {
             <Requirements
               items={[
                 'Windows 10 or 11 on a 64-bit x86 PC. Runs on the CPU.',
-                'An NVIDIA GPU is optional: driver R527 or newer (CUDA 13 from R580, CUDA 12 before and for GTX 10-series and Volta cards). The command line uses it; the desktop app runs on the CPU.',
+                'An NVIDIA GPU is optional: driver R527 or newer (CUDA 13 from R580, CUDA 12 before and for GTX 10-series and Volta cards). The command line uses it; the desktop app uses it when the command line is installed too, and the CPU otherwise.',
                 <>
                   WSL 2 with the Linux installer works too. The server in WSL answers Windows programs at{' '}
                   <code class="font-mono">localhost:{LOCAL_PORT}</code>.

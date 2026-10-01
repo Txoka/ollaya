@@ -11,7 +11,8 @@
 mod tray;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -86,11 +87,140 @@ fn ollaya_exe() -> PathBuf {
 
 /// A command for the bundled binary that never opens a console window on Windows.
 fn ollaya_command() -> std::process::Command {
-    let mut cmd = std::process::Command::new(ollaya_exe());
+    command_for(&ollaya_exe())
+}
+
+/// A command for `exe` that never opens a console window on Windows.
+fn command_for(exe: &Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new(exe);
     cmd.stdin(std::process::Stdio::null());
     #[cfg(windows)]
     std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
     cmd
+}
+
+/// The `ollaya` that runs the server: the command-line install's when it can use the GPU, else
+/// the bundled one, with a line for `server.log` that says which and why.
+///
+/// On Windows and Linux the app bundles no GPU pack (1.4 GB and more); `install.ps1` and
+/// `install.sh` add one next to the command-line `ollaya` when they find an NVIDIA GPU. A server
+/// started from that install uses the GPU as `ollaya serve` in a terminal does (#44). It is used
+/// only when it is as new as this app, so the app never serves models with an older server.
+fn server_exe() -> (PathBuf, Option<String>) {
+    let bundled = ollaya_exe();
+    if cfg!(target_os = "macos") {
+        return (bundled, None);
+    }
+    let app = VERSION;
+    let mut note = None;
+    for cli in cli_candidates(&bundled) {
+        if !has_gpu_pack(&cli) {
+            continue;
+        }
+        match cli_version(&cli) {
+            Some(v) if version_at_least(&v, app) => {
+                let msg = format!(
+                    "desktop app: starting the server from {} ({v}), which has a GPU pack",
+                    cli.display()
+                );
+                return (cli, Some(msg));
+            }
+            v => {
+                note = Some(format!(
+                    "desktop app: {} has a GPU pack but is {}, older than this app ({app}); \
+                     the server runs on the CPU. Run `ollaya update` to use the GPU.",
+                    cli.display(),
+                    v.as_deref().unwrap_or("of an unknown version"),
+                ));
+            }
+        }
+    }
+    (bundled, note)
+}
+
+/// This app's version, which is its bundled `ollaya`'s.
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Command-line installs of `ollaya` other than the bundled one: on `PATH`, then where the
+/// install scripts put it by default.
+fn cli_candidates(bundled: &Path) -> Vec<PathBuf> {
+    let name = bundled.file_name().unwrap_or_default();
+    let mut places: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    if cfg!(windows) {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            places.push(
+                PathBuf::from(local)
+                    .join("Programs")
+                    .join("Ollaya")
+                    .join("bin"),
+            );
+        }
+    } else {
+        places.push(PathBuf::from("/usr/local/bin"));
+        if let Some(home) = dirs::home_dir() {
+            places.push(home.join(".local").join("bin"));
+        }
+    }
+    let real = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let mut seen = vec![real(bundled)];
+    let mut found = Vec::new();
+    for exe in places
+        .into_iter()
+        .map(|d| d.join(name))
+        .filter(|p| p.is_file())
+    {
+        let r = real(&exe);
+        if !seen.contains(&r) {
+            seen.push(r);
+            found.push(exe);
+        }
+    }
+    found
+}
+
+/// Whether the install around `exe` (`<prefix>/bin/ollaya`) has a CUDA pack in
+/// `<prefix>/lib/ollaya`, as the server looks for one (`ollaya_server::launch::cuda_dir`).
+fn has_gpu_pack(exe: &Path) -> bool {
+    let provider = if cfg!(windows) {
+        "onnxruntime_providers_cuda.dll"
+    } else {
+        "libonnxruntime_providers_cuda.so"
+    };
+    let Some(lib) = exe
+        .parent()
+        .and_then(Path::parent)
+        .map(|p| p.join("lib").join("ollaya"))
+    else {
+        return false;
+    };
+    ["cuda_v13", "cuda_v12"]
+        .iter()
+        .any(|pack| lib.join(pack).join(provider).is_file())
+}
+
+/// `exe`'s own version. With no server running, `ollaya --version` prints it as
+/// "Warning: client version is 0.8.0".
+fn cli_version(exe: &Path) -> Option<String> {
+    let out = command_for(exe).arg("--version").output().ok()?;
+    let text = String::from_utf8_lossy(&out.stderr);
+    text.lines()
+        .find_map(|l| l.split_once("client version is "))
+        .map(|(_, v)| v.trim().to_owned())
+        .filter(|v| !v.is_empty())
+}
+
+/// Whether version `v` is `min` or newer, comparing the numbers of `major.minor.patch`.
+fn version_at_least(v: &str, min: &str) -> bool {
+    let parse = |s: &str| -> Option<Vec<u64>> {
+        let core = s.trim_start_matches('v').split(['-', '+']).next()?;
+        core.split('.').map(|n| n.parse().ok()).collect()
+    };
+    match (parse(v), parse(min)) {
+        (Some(a), Some(b)) => a >= b,
+        _ => false,
+    }
 }
 
 async fn status_now() -> Status {
@@ -143,13 +273,19 @@ async fn start_server_now(app: &AppHandle) -> Result<Status, String> {
         .append(true)
         .open(logs.join("server.log"))
         .map_err(|e| e.to_string())?;
-    let mut cmd = ollaya_command();
+    let (exe, note) = server_exe();
+    if let Some(note) = note {
+        let _ = writeln!(&log, "{note}");
+    }
+    let mut cmd = command_for(&exe);
     cmd.arg("serve")
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log);
     // GGUF models run on the llama.cpp build bundled in the app's resources (desktop.yml stages
-    // it there); `ollaya serve` finds it through OLLAYA_LIBRARY_PATH.
-    if std::env::var_os("OLLAYA_LIBRARY_PATH").is_none()
+    // it there); the bundled `ollaya serve` finds it through OLLAYA_LIBRARY_PATH. A command-line
+    // install uses its own, next to its GPU pack.
+    if exe == ollaya_exe()
+        && std::env::var_os("OLLAYA_LIBRARY_PATH").is_none()
         && let Ok(dir) = app.path().resource_dir()
     {
         let lib = dir.join("lib").join("ollaya");
@@ -162,7 +298,7 @@ async fn start_server_now(app: &AppHandle) -> Result<Status, String> {
     #[cfg(windows)]
     std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000 | 0x0000_0200); // no window, new group
     cmd.spawn()
-        .map_err(|e| format!("could not start {}: {e}", ollaya_exe().display()))?;
+        .map_err(|e| format!("could not start {}: {e}", exe.display()))?;
     state.started_server.store(true, Ordering::SeqCst);
 
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -438,6 +574,40 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn versions_compare_by_number() {
+        assert!(version_at_least("0.8.0", "0.8.0"));
+        assert!(version_at_least("0.10.0", "0.9.2"));
+        assert!(version_at_least("v1.0.0-rc1", "0.8.0"));
+        assert!(!version_at_least("0.7.5", "0.8.0"));
+        assert!(!version_at_least("unknown", "0.8.0"));
+    }
+
+    #[test]
+    fn a_gpu_pack_sits_in_the_install_beside_bin() {
+        let root = std::env::temp_dir().join(format!("ollaya-desktop-test-{}", std::process::id()));
+        let exe = root.join("bin").join(if cfg!(windows) {
+            "ollaya.exe"
+        } else {
+            "ollaya"
+        });
+        std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        std::fs::write(&exe, b"").unwrap();
+        assert!(!has_gpu_pack(&exe));
+        let pack = root.join("lib").join("ollaya").join("cuda_v12");
+        std::fs::create_dir_all(&pack).unwrap();
+        let provider = if cfg!(windows) {
+            "onnxruntime_providers_cuda.dll"
+        } else {
+            "libonnxruntime_providers_cuda.so"
+        };
+        std::fs::write(pack.join(provider), b"").unwrap();
+        assert!(has_gpu_pack(&exe));
+        // The bundled binary itself is never a candidate.
+        assert!(cli_candidates(&exe).iter().all(|p| p != &exe));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn questions_come_from_a_preset_the_custom_box_or_the_model() {
