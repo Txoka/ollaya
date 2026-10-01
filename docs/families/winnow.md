@@ -168,3 +168,68 @@ typed-decisions test, 2,000 decisions.
 - **Calibration.** Temperature 1.0, uncalibrated by the authors' own statement (typed-decisions ECE 0.157).
 - **Memory.** 12.67 GB Q8 weights; a 16 GB GPU is the tested floor.
 - **Vision.** Images (`winnow.images`, mmproj) are outside the TypeSafe core and not covered by v1.
+
+
+## Opt-in PNG image decisions
+
+The `e4b-vision` manifest in this branch extends `e4b` with the author's unmodified
+`gguf/mmproj-Winnow-E4B.gguf` from the same pinned Hugging Face revision. Its SHA256 is
+`ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51` (990,372,672 bytes).
+This tag requires registry publication by the maintainer before `ollaya pull winnow:e4b-vision`
+works against the public registry. Existing text tags and default downloads stay unchanged.
+
+The runner loads `libmtmd` alongside `libllama` from the same pinned llama.cpp release.
+Run `scripts/llama-cpp.sh` for your platform to stage both libraries; older installations that
+omit `libmtmd` must update their runtime libraries. A projector must match its language model.
+The loader supports Winnow projectors; the supplied opt-in manifest and GPU validation cover E4B.
+
+Use the native `/api/decide` endpoint, with the normal `model`, `state`, and `questions` fields,
+and an `images` array containing base64 PNGs (or base64 data URLs). The CLI's existing `--image`
+option also forwards a PNG. `/v1/systemone` keeps its existing text-only schema.
+For example, after publishing/installing the opt-in manifest:
+
+```json
+{
+  "model": "winnow:e4b-vision",
+  "state": "Inspect the supplied image.",
+  "images": ["<base64 PNG bytes>"],
+  "questions": {
+    "color": {
+      "type": "choice",
+      "instructions": "What is the dominant color in the image?",
+      "criteria": {"red": "Red", "green": "Green", "blue": "Blue"}
+    }
+  }
+}
+```
+
+Images appear in order before the escaped state, following the author's image prompt.
+Their positions count against the context budget. The image/state prefix is evaluated once per
+request and reused across that request's question suffixes. Image requests clear their cache
+between requests; no-image requests keep the existing text inference path.
+
+Only PNG still images are accepted, up to 16 per request, within the existing decoder size limit.
+Noncausal image chunks must also fit the runner's 512-token microbatch; larger chunks are rejected
+with a resize hint. Audio, video, and remote image fetching are outside this implementation.
+The existing text calibration is retained; it has not been refitted or validated for image questions.
+
+### Validation on this branch
+
+On an RTX 4070 12GB, E4B Q8_0 with its matching projector and a **2,048-token test context**
+passed real-image smoke checks: red/green/blue images, two questions per image, repeated-image
+logit consistency, text-only logits before/after image inference, and invalid-image rejection.
+The manifest retains the existing 8,192-token context, which needs more memory than this test.
+This is a runtime smoke check, not a visual benchmark or parity claim against the author's patched
+server. The same smoke check also passed on CPU. Metal, Windows, Winnow-12B projectors, and full daemon
+HTTP integration still need runtime validation.
+
+The reproducible runner check is:
+
+```sh
+cargo run -p ollaya-runner --example winnow_vision --   MODEL.gguf decision.json LLAMA_LIBRARY_DIR MMPROJ.gguf [CUDA_LIBRARY_FILE]
+```
+
+`decision.json` supplies the test context; the optional CUDA argument is the path to the `libggml-cuda` library file.
+On Linux, also make the CUDA dependencies available through `LD_LIBRARY_PATH`.
+The normal workspace tests and strict workspace Clippy checks pass. No model weights are included
+in this branch: its manifest points to the original author's files.

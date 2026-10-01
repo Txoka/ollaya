@@ -504,3 +504,10 @@ CATALOG = {
                   "probabilities within 1.6e-6. The prompts are byte-identical to the author's jevk5.prompt.",
     },
 }
+
+# Opt-in vision tag: the text tags keep their downloads and execution unchanged.
+CATALOG["winnow"]["tags"]["e4b-vision"] = {
+    **CATALOG["winnow"]["tags"]["e4b"],
+    "mmproj": "gguf/mmproj-Winnow-E4B.gguf",
+    "description": "Winnow E4B Q8_0 with the author's matching vision projector; PNG image decisions through libmtmd.",
+}

@@ -47,6 +47,7 @@ MEDIA = {
     # A GGUF file (weights, tokenizer and chat template) that llama.cpp loads, unmodified from the
     # author's repository.
     "gguf": "application/vnd.ollaya.weights.gguf",
+    "mmproj": "application/vnd.ollaya.projector.gguf",
 }
 HF = "https://huggingface.co"
 
@@ -233,7 +234,10 @@ def package_gguf(spec, tag, v, blobs):
         "release_date": hf_commit_date(repo, commit),
     }, indent=2).encode())
     print("  %s:%s %s %.2f GB (%s)" % (spec["model"], tag, pin["quantization"], gguf["size"] / 1e9, v["gguf"]))
-    return config, [gguf, decision, calibration, lic]
+    layers = [gguf, decision, calibration, lic]
+    if v.get("mmproj"):
+        layers.append(upstream(MEDIA["mmproj"], repo, commit, v["mmproj"]))
+    return config, layers
 
 
 def package_model(spec, blobs):

@@ -18,6 +18,7 @@
 
 pub mod cuda_kernels;
 pub mod ffi;
+mod vision;
 
 use std::ffi::{CString, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
@@ -187,6 +188,8 @@ struct Vocab {
 
 /// A GGUF model loaded in llama.cpp.
 pub struct LlamaModel {
+    // Must drop before handles: projector borrows the text model.
+    vision: Option<vision::Vision>,
     handles: Handles,
     vocab: Vocab,
     layout: Layout,
@@ -676,6 +679,7 @@ impl LlamaModel {
         };
         let layout = prepare(&vocab, &value)?;
         let model = LlamaModel {
+            vision: None,
             handles,
             vocab,
             layout,
@@ -685,6 +689,105 @@ impl LlamaModel {
         };
         tracing::info!(model = %model.describe(), device = %model.device, layout = %d.layout, "loaded");
         Ok(model)
+    }
+
+    /// Attach a matching GGUF projector. Text-only loads need no libmtmd.
+    pub fn load_projector(
+        &mut self,
+        projector: &Path,
+        libs: &Libraries,
+        threads: Option<usize>,
+    ) -> Result<(), Error> {
+        if !matches!(self.layout, Layout::Winnow(_)) {
+            return Err(model_error("GGUF image support requires winnow-v1"));
+        }
+        self.vision = Some(vision::Vision::load(
+            &libs.dir,
+            projector,
+            self.handles.model.as_ptr(),
+            self.device != "cpu",
+            threads.map_or_else(default_threads, |t| t as i32),
+        )?);
+        Ok(())
+    }
+
+    fn run_winnow_images(
+        &self,
+        state: &Value,
+        questions: &Value,
+        images: &[Vec<u8>],
+    ) -> Result<Output, Error> {
+        let Layout::Winnow(cfg) = &self.layout else {
+            return Err(crate::vision::ImageError::Unsupported.into());
+        };
+        let vision = self
+            .vision
+            .as_ref()
+            .ok_or(crate::vision::ImageError::Unsupported)?;
+        let prompts = cfg.questions(questions)?;
+        let (state_text, state_tokens, state_truncated) =
+            self.vocab
+                .cut(winnow::state_text(state)?, cfg.max_state_tokens, true)?;
+        let prefix = winnow::image_prefix(&state_text, images.len());
+        let mut ctx = self
+            .handles
+            .context
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        // Projector and llama context share this mutex; no cache is reused between image requests.
+        let chunks = vision.prefix(&prefix, images)?;
+        let positions = chunks.positions();
+        let rows: Vec<_> = prompts.into_iter().map(|(qid,q)| {
+            let suffix = self.vocab.tokenize(&q.suffix, false, true)?;
+            if positions + suffix.len() >= self.settings.n_ctx {
+                return Err(ollaya_decision::Error::invalid(format!("question {qid:?}: image/state prefix and question exceed {} context positions", self.settings.n_ctx)).into());
+            }
+            Ok((q, suffix))
+        }).collect::<Result<_, Error>>()?;
+        self.clear(&mut ctx);
+        let result = (|| {
+            chunks.evaluate(ctx.ptr.as_ptr())?;
+            let mut output = Vec::with_capacity(rows.len());
+            let mut input_tokens = 0;
+            for (q, suffix) in rows {
+                // SAFETY: this request owns the context lock; retain only its image/state prefix.
+                if !unsafe {
+                    (self.handles.api.llama_memory_seq_rm)(ctx.memory, 0, positions as i32, -1)
+                } {
+                    return Err(model_error("could not retain image prefix"));
+                }
+                self.decode(&mut ctx, &suffix, positions, true)?;
+                // SAFETY: decode produced vocabulary logits for the final suffix token.
+                let ptr = unsafe { (self.handles.api.llama_get_logits_ith)(ctx.ptr.as_ptr(), -1) };
+                if ptr.is_null() {
+                    return Err(model_error("llama.cpp returned no logits"));
+                }
+                let logits = unsafe { std::slice::from_raw_parts(ptr, self.vocab.n_tokens) };
+                let selected = q
+                    .label_ids
+                    .iter()
+                    .map(|&id| {
+                        logits
+                            .get(id as usize)
+                            .copied()
+                            .ok_or_else(|| model_error("label outside vocabulary"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                output.push(QuestionOutput {
+                    logits: selected,
+                    act_logits: None,
+                });
+                input_tokens += positions + suffix.len();
+            }
+            Ok(Output {
+                questions: output,
+                input_tokens,
+                state_tokens,
+                state_truncated,
+            })
+        })();
+        self.clear(&mut ctx);
+        result
     }
 
     /// `llama_model_desc`: architecture, size and type (`gemma4 12B Q8_0`).
@@ -1162,6 +1265,21 @@ pub fn split_point(ids: &[Token], reference: &[Token]) -> usize {
 }
 
 impl crate::engine::Engine for LlamaModel {
+    fn reads_images(&self) -> bool {
+        self.vision.is_some()
+    }
+    fn run_images(
+        &self,
+        state: &Value,
+        questions: &Value,
+        images: &[Vec<u8>],
+    ) -> Result<Output, Error> {
+        if images.is_empty() {
+            return self.run_json(state, questions);
+        }
+        self.run_winnow_images(state, questions, images)
+    }
+
     fn run(&self, state: &Value, questions: &Questions) -> Result<Output, Error> {
         // The llama layouts read the questions as the daemon sent them.
         let raw: Map<String, Value> = questions

@@ -69,6 +69,8 @@ pub struct RunnerConfig {
     pub tokenizer: Option<PathBuf>,
     /// A GGUF model, which runs on llama.cpp instead of ONNX Runtime.
     pub gguf: Option<PathBuf>,
+    /// Matching multimodal projector, for Winnow GGUF image input.
+    pub mmproj: Option<PathBuf>,
     /// Where llama.cpp's libraries are (`lib/ollaya/llama`), for a GGUF model.
     pub llama_dir: Option<PathBuf>,
     pub decision: PathBuf,
@@ -134,6 +136,9 @@ fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Lo
     };
     let libs = Libraries { dir, cuda };
     let mut model = LlamaModel::load(gguf, &config.decision, &libs, &target, config.threads)?;
+    if let Some(projector) = &config.mmproj {
+        model.load_projector(projector, &libs, config.threads)?;
+    }
     // As on the ONNX GPU path: the first evaluation pays one-off costs (kernels, graphs,
     // buffers), and a GPU that fails it moves an `auto` model to the CPU. (`run` warms up models
     // on the CPU.)
@@ -152,6 +157,9 @@ fn load_llama(config: &RunnerConfig, gguf: &Path) -> Result<(Box<dyn Engine>, Lo
         );
         drop(model);
         model = LlamaModel::load(gguf, &config.decision, &libs, &Target::Cpu, config.threads)?;
+        if let Some(projector) = &config.mmproj {
+            model.load_projector(projector, &libs, config.threads)?;
+        }
     }
     let loaded = Loaded {
         device: model.device.clone(),
