@@ -132,3 +132,29 @@ the single-4070 test machine.
 
 CPU stock-reference parity also passes 65/65 across the same 21 requests,
 maximum normalized logit error 1.1467874e-05 (unchanged goldens and tolerance).
+
+## Quiet multimodal logging (2026-10-02)
+
+Install `mtmd_helper_log_set` before projector initialization, which registers
+the same callback for the helper and vision encoder. Forward only warning/error
+levels through the existing tracing callback; discard informational/debug
+messages even when Ollaya debug logging is enabled, since mtmd debug messages
+include complete prompts. No patches or rebuilds of the pinned libmtmd library
+are required.
+
+Real GPU runner regression with `OLLAYA_LOG=debug`: an image request containing
+distinct state/question markers succeeds, neither marker appears in the combined
+stdout/stderr log, and mtmd prompt/tensor dumps are absent. Reproduce with:
+
+```sh
+PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_logs \
+  http://127.0.0.1:RUNNER_PORT RUNNER_LOG
+```
+
+The runner must be started with debug logging and stdout/stderr redirected to
+RUNNER_LOG. The check uses synthetic image/request data and requires local
+weights; it never modifies logs or downloads weights. Workspace tests, clippy
+and formatting checks pass.
+
+After installing the callback, CUDA stock-reference parity remains 65/65 over
+21 requests, with maximum normalized logit error 9.5502737e-06.

@@ -34,6 +34,18 @@ struct Text {
     add_special: bool,
     parse_special: bool,
 }
+// mtmd's default logger prints even DEBUG messages (including complete prompts) to
+// stderr. Never forward those messages, even when Ollaya's own debug logs are enabled.
+unsafe extern "C" fn log(level: c_int, text: *const c_char, user: *mut c_void) {
+    if matches!(
+        level,
+        super::ffi::LOG_LEVEL_WARN | super::ffi::LOG_LEVEL_ERROR
+    ) {
+        // SAFETY: mtmd supplies the same NUL-terminated ggml log contract as llama.cpp.
+        unsafe { super::log(level, text, user) };
+    }
+}
+
 struct Api {
     _lib: Library,
     defaults: unsafe extern "C" fn() -> Params,
@@ -111,6 +123,11 @@ impl Api {
                         .map_err(|e| model_error(format!("libmtmd: {e}")))?
                 };
             }
+            // The helper setter configures both helper and encoder loggers. Install it
+            // before initialization; the callback itself lives in the runner executable.
+            let set_log: unsafe extern "C" fn(super::ffi::LogCallback, *mut c_void) =
+                symbol!("mtmd_helper_log_set");
+            set_log(log, std::ptr::null_mut());
             Ok(Self {
                 defaults: symbol!("mtmd_context_params_default"),
                 init: symbol!("mtmd_init_from_file"),
