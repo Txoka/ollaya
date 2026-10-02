@@ -213,23 +213,30 @@ Noncausal image chunks must also fit the runner's 512-token microbatch; larger c
 with a resize hint. Audio, video, and remote image fetching are outside this implementation.
 The existing text calibration is retained; it has not been refitted or validated for image questions.
 
-### Validation on this branch
+### Evaluation plan and parity
 
-On an RTX 4070 12GB, E4B Q8_0 with its matching projector and a **2,048-token test context**
-passed real-image smoke checks: red/green/blue images, two questions per image, repeated-image
-logit consistency, text-only logits before/after image inference, and invalid-image rejection.
-The manifest retains the existing 8,192-token context, which needs more memory than this test.
-This is a runtime smoke check, not a visual benchmark or parity claim against the author's patched
-server. The same smoke check also passed on CPU. Metal, Windows, Winnow-12B projectors, and full daemon
-HTTP integration still need runtime validation.
+Image prompts use stock llama-server's full-string multimodal tokenization. Unlike the text-only
+plan above, the state/question whitespace boundary is tokenized together: separately tokenizing
+those strings produces different tokens and fails image parity. The runner identifies the shared
+text tail after the final image, evaluates the image/state prefix once, and evaluates each question
+from that fixed split. Image encoding batches subsequent compatible images as stock llama-server
+does; independently encoding each image also fails multi-image parity. The text-only path is unchanged.
 
-The reproducible runner check is:
+On Linux, E4B Q8_0 with its matching projector passed the unchanged `1e-3` normalized option-logit
+gate against stock llama-server b11146 on each device:
 
-```sh
-cargo run -p ollaya-runner --example winnow_vision --   MODEL.gguf decision.json LLAMA_LIBRARY_DIR MMPROJ.gguf [CUDA_LIBRARY_FILE]
-```
+| Device | Image requests / questions | Decisions | Max normalized option-logit error |
+|---|---|---|---|
+| RTX 4070 CUDA | 21 / 65 | 65/65 | 9.55e-6 |
+| x86-64 CPU | 21 / 65 | 65/65 | 1.15e-5 |
 
-`decision.json` supplies the test context; the optional CUDA argument is the path to the `libggml-cuda` library file.
-On Linux, also make the CUDA dependencies available through `LD_LIBRARY_PATH`.
-The normal workspace tests and strict workspace Clippy checks pass. No model weights are included
-in this branch: its manifest points to the original author's files.
+The image fixtures use a 2,048-token context. Native HTTP tests also pass with the shipped
+8,192-token manifest. They cover base64/data URLs, multiple images, malformed inputs, count and context limits, text-only
+compatibility and unloading. All 505 existing text questions (123 requests, 15 rejected) also pass
+against a stock reference replayed on the RTX 4070, max error 1.14e-5.
+These are runtime parity checks, not visual accuracy or image calibration benchmarks.
+Metal, Windows, and Winnow-12B vision have not been validated.
+
+See [the measurement and reproduction report](../measurements/winnow-e4b-vision.md).
+No weights or generated goldens are committed; image fixtures are generated deterministically.
+The normal workspace tests, strict Clippy checks, packaging tests and site build pass.

@@ -58,6 +58,25 @@ struct Api {
     chunk_type: unsafe extern "C" fn(*const c_void) -> c_int,
     chunk_tokens: unsafe extern "C" fn(*const c_void) -> usize,
     non_causal: unsafe extern "C" fn(*const c_void, *const c_void) -> bool,
+    text_tokens: unsafe extern "C" fn(*const c_void, *mut usize) -> *const i32,
+    chunk_positions: unsafe extern "C" fn(*const c_void) -> i32,
+    batch_init: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    batch_free: unsafe extern "C" fn(*mut c_void),
+    batch_add: unsafe extern "C" fn(*mut c_void, *const c_void) -> i32,
+    batch_encode: unsafe extern "C" fn(*mut c_void) -> i32,
+    batch_output: unsafe extern "C" fn(*mut c_void, *const c_void) -> *mut f32,
+    decode_image: unsafe extern "C" fn(
+        *mut c_void,
+        *mut c_void,
+        *const c_void,
+        *mut f32,
+        i32,
+        i32,
+        i32,
+        *mut i32,
+        *const c_void,
+        *mut c_void,
+    ) -> i32,
     eval: unsafe extern "C" fn(
         *mut c_void,
         *mut c_void,
@@ -109,7 +128,15 @@ impl Api {
                 chunk_type: symbol!("mtmd_input_chunk_get_type"),
                 chunk_tokens: symbol!("mtmd_input_chunk_get_n_tokens"),
                 non_causal: symbol!("mtmd_decode_use_non_causal"),
-                eval: symbol!("mtmd_helper_eval_chunks"),
+                batch_init: symbol!("mtmd_batch_init"),
+                batch_free: symbol!("mtmd_batch_free"),
+                batch_add: symbol!("mtmd_batch_add_chunk"),
+                batch_encode: symbol!("mtmd_batch_encode"),
+                batch_output: symbol!("mtmd_batch_get_output_embd"),
+                decode_image: symbol!("mtmd_helper_decode_image_chunk"),
+                text_tokens: symbol!("mtmd_input_chunk_get_tokens_text"),
+                chunk_positions: symbol!("mtmd_input_chunk_get_n_pos"),
+                eval: symbol!("mtmd_helper_eval_chunk_single"),
                 _lib: lib,
             })
         }
@@ -257,29 +284,116 @@ impl Chunks<'_> {
         // SAFETY: chunks returned by successful tokenization.
         unsafe { (self.vision.api.positions)(self.ptr.as_ptr()).max(0) as usize }
     }
-    pub(super) fn evaluate(&self, context: *mut c_void) -> Result<usize, Error> {
-        let mut end = 0;
-        // SAFETY: caller owns context mutex, projector and chunks are live. Only prefix logits are omitted.
-        let rc = unsafe {
-            (self.vision.api.eval)(
-                self.vision.ptr.as_ptr(),
-                context,
-                self.ptr.as_ptr(),
-                0,
-                0,
-                super::N_BATCH as i32,
-                false,
-                &mut end,
-            )
-        };
-        if rc != 0 {
-            return Err(model_error(format!(
-                "image prefix evaluation failed ({rc})"
-            )));
+    /// Text after the final image; tokenization must include the question to preserve
+    /// whitespace merges at the state/question boundary, just as stock llama-server does.
+    pub(super) fn tail(&self) -> Result<(usize, Vec<i32>), Error> {
+        // SAFETY: handles belong to this live, tokenized chunk list.
+        unsafe {
+            let count = (self.vision.api.count)(self.ptr.as_ptr());
+            if count == 0 {
+                return Err(model_error("empty multimodal prompt"));
+            }
+            let last = (self.vision.api.chunk)(self.ptr.as_ptr(), count - 1);
+            if (self.vision.api.chunk_type)(last) != 0 {
+                return Err(model_error("multimodal prompt must end in text"));
+            }
+            let mut n = 0;
+            let tokens = (self.vision.api.text_tokens)(last, &mut n);
+            if tokens.is_null() || n == 0 {
+                return Err(model_error("empty multimodal text tail"));
+            }
+            let before = self.positions() - (self.vision.api.chunk_positions)(last) as usize;
+            Ok((before, std::slice::from_raw_parts(tokens, n).to_vec()))
         }
-        if end < 0 || end as usize != self.positions() {
+    }
+    /// Evaluate every chunk preceding the final text tail, once per request.
+    pub(super) fn evaluate_head(&self, context: *mut c_void) -> Result<usize, Error> {
+        let mut end = 0;
+        let api = &self.vision.api;
+        let mut batch: Option<VisionBatch<'_>> = None;
+        // SAFETY: caller owns context mutex; chunks and batch remain live through decode.
+        unsafe {
+            let count = (api.count)(self.ptr.as_ptr());
+            for i in 0..count.saturating_sub(1) {
+                let chunk = (api.chunk)(self.ptr.as_ptr(), i);
+                let rc = if (api.chunk_type)(chunk) == 1 {
+                    let mut embd = batch.as_ref().map_or(std::ptr::null_mut(), |b| {
+                        (api.batch_output)(b.ptr.as_ptr(), chunk)
+                    });
+                    if embd.is_null() {
+                        let ptr = NonNull::new((api.batch_init)(self.vision.ptr.as_ptr()))
+                            .ok_or_else(|| model_error("vision batch allocation failed"))?;
+                        let next = VisionBatch { api, ptr };
+                        if (api.batch_add)(ptr.as_ptr(), chunk) != 0 {
+                            return Err(model_error("could not add image to empty vision batch"));
+                        }
+                        // Match stock llama-server: batch subsequent compatible image chunks,
+                        // including across intervening text, until mtmd's batch limit is reached.
+                        for j in i + 1..count {
+                            let candidate = (api.chunk)(self.ptr.as_ptr(), j);
+                            if (api.chunk_type)(candidate) == 1
+                                && (api.batch_add)(ptr.as_ptr(), candidate) != 0
+                            {
+                                break;
+                            }
+                        }
+                        if (api.batch_encode)(ptr.as_ptr()) != 0 {
+                            return Err(model_error("vision batch encoding failed"));
+                        }
+                        embd = (api.batch_output)(ptr.as_ptr(), chunk);
+                        batch = Some(next);
+                    }
+                    if embd.is_null() {
+                        return Err(model_error("missing image embeddings"));
+                    }
+                    (api.decode_image)(
+                        self.vision.ptr.as_ptr(),
+                        context,
+                        chunk,
+                        embd,
+                        end,
+                        0,
+                        super::N_BATCH as i32,
+                        &mut end,
+                        std::ptr::null(),
+                        std::ptr::null_mut(),
+                    )
+                } else {
+                    (api.eval)(
+                        self.vision.ptr.as_ptr(),
+                        context,
+                        chunk,
+                        end,
+                        0,
+                        super::N_BATCH as i32,
+                        false,
+                        &mut end,
+                    )
+                };
+                if rc != 0 {
+                    return Err(model_error(format!(
+                        "image prefix evaluation failed ({rc})"
+                    )));
+                }
+            }
+        }
+        let (expected, _) = self.tail()?;
+        if end < 0 || end as usize != expected {
             return Err(model_error("image prefix position mismatch"));
         }
         Ok(end as usize)
+    }
+}
+
+struct VisionBatch<'a> {
+    api: &'a Api,
+    ptr: NonNull<c_void>,
+}
+impl Drop for VisionBatch<'_> {
+    fn drop(&mut self) {
+        // SAFETY: uniquely owned batch; borrowed chunks outlive it.
+        unsafe {
+            (self.api.batch_free)(self.ptr.as_ptr());
+        }
     }
 }

@@ -8,6 +8,7 @@ Winnow is a pair of open decision models by EldanRing, fine-tuned from Google De
 |---|---|---|---|---|
 | `winnow:latest`, `winnow:12b` | Gemma 4 12B IT | Q8_0 GGUF, 12.7 GB | 85.7 % | 81.5 % |
 | `winnow:e4b` | Gemma 4 E4B IT | Q8_0 GGUF, 8.0 GB | 80.5 % | 72.7 % |
+| `winnow:e4b-vision` | Same E4B backbone + projector | Q8_0 GGUF + 990 MB projector | Not measured for images | Not measured for images |
 
 The accuracies are the author's, measured with the author's server on the same Q8_0 files (model cards of [Winnow-12B](https://huggingface.co/EldanRing/Winnow-12B) and [Winnow-E4B](https://huggingface.co/EldanRing/Winnow-E4B)). For comparison, the author reports 85.7 % and 87.0 % for Jev 1.13 on the same two sets. On typed-decisions (all 400 states, argmax against the majority label), measured by Ollaya, `winnow:12b` scores 0.702 and `winnow:e4b` 0.722. With its speed, that makes `winnow:e4b` Ollaya's recommended model.
 
@@ -39,8 +40,26 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `winn
 - **Size.** These are large language models. `winnow:12b` needs about 14 GB of GPU memory and `winnow:e4b` about 9 GB at the 8,192-token context; on the CPU they are much slower than the encoder models.
 - **Context.** State, question and options share 8,192 tokens. A longer state is cut to 6,144 tokens.
 - **Options.** 2 to 64 options per question and up to 256 questions per request. Probabilities are conditional on the options offered.
-- **Text only.** The author's server can also read images through a vision projector; Ollaya runs the text decisions only.
+- **Images:** `winnow:e4b-vision` includes the matching E4B projector (990 MB). It accepts up to 16 ordered PNGs through `--image` or `images` on `/api/decide`, within the combined context budget. `/v1/*` and the existing text tags stay text-only. Requires the release containing this feature; earlier installations lack `libmtmd`.
 
 ## Weights and license
 
 Apache-2.0. Winnow is developed by EldanRing ([Winnow-12B](https://huggingface.co/EldanRing/Winnow-12B), [Winnow-E4B](https://huggingface.co/EldanRing/Winnow-E4B), inference code at [github.com/EldanRing/winnow-inference](https://github.com/EldanRing/winnow-inference)), from Gemma 4 by Google DeepMind, also Apache-2.0. Ollaya downloads the GGUF from the author's repository, pinned to a commit and checked against its sha256; it never re-hosts it. llama.cpp is MIT.
+
+
+## Image decisions
+
+```shell
+ollaya run winnow:e4b-vision --image shelf.png --questions '{"blocked":{"type":"noul","instructions":"Is the aisle blocked?"}}' "A photo from the warehouse camera."
+```
+
+The image path uses Winnow's prompt with ordered images before the state, stock llama.cpp's
+multimodal tokenization, and its option-label readout. The image/state prefix is shared within a
+request. Images are not cached across requests. E4B's existing text temperature is retained;
+image calibration and visual benchmark accuracy have not been measured.
+
+On Linux, the E4B Q8_0 image path matches pinned stock llama-server on 21 requests / 65 questions
+on CPU and an RTX 4070 (2,048-token test context). The maximum normalized option-logit errors
+are 1.15e-5 and 9.56e-6 respectively, below the unchanged 1e-3 parity gate. This covers all three
+decision types, multiple questions, image ordering, repeated images and escaped state text.
+Metal, Windows, and Winnow-12B vision have not been validated.

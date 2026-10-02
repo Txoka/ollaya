@@ -3,10 +3,10 @@
   "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
   "config": {
     "mediaType": "application/vnd.ollaya.config.v1+json",
-    "digest": "sha256:274b51337582ffed72cbc67ac9508949b4c7da8bf3d9f6e673b2be864ac3dbb3",
-    "size": 510,
+    "digest": "sha256:646ef1e9b25d14cff0156f7b5f56ae18fdb455f1e0af66b408f9e0f075f9fa1f",
+    "size": 460,
     "urls": [
-      "https://ollaya.dev/blobs/sha256-274b51337582ffed72cbc67ac9508949b4c7da8bf3d9f6e673b2be864ac3dbb3"
+      "https://ollaya.dev/blobs/sha256-646ef1e9b25d14cff0156f7b5f56ae18fdb455f1e0af66b408f9e0f075f9fa1f"
     ]
   },
   "layers": [

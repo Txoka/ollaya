@@ -6,7 +6,7 @@ refuses to run if its sha256 differs from the upstream file.
 """
 import os
 
-from .laya_ref import DEFAULT_ROOT
+from .model_paths import DEFAULT_ROOT
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "out")
 LICENSE_APACHE = open(os.path.join(os.path.dirname(__file__), "..", "..", "LICENSE")).read()

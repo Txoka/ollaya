@@ -736,27 +736,46 @@ impl LlamaModel {
             .unwrap_or_else(|p| p.into_inner());
         // Projector and llama context share this mutex; no cache is reused between image requests.
         let chunks = vision.prefix(&prefix, images)?;
-        let positions = chunks.positions();
-        let rows: Vec<_> = prompts.into_iter().map(|(qid,q)| {
-            let suffix = self.vocab.tokenize(&q.suffix, false, true)?;
-            if positions + suffix.len() >= self.settings.n_ctx {
-                return Err(ollaya_decision::Error::invalid(format!("question {qid:?}: image/state prefix and question exceed {} context positions", self.settings.n_ctx)).into());
+        let (head_positions, prefix_tail) = chunks.tail()?;
+        let mut shared = prefix_tail.len();
+        let mut rows = Vec::with_capacity(prompts.len());
+        for (qid, q) in prompts {
+            let full = vision.prefix(&(prefix.clone() + &q.suffix), images)?;
+            let (head, tail) = full.tail()?;
+            if head != head_positions {
+                return Err(model_error("image prefix changed between questions"));
             }
-            Ok((q, suffix))
-        }).collect::<Result<_, Error>>()?;
+            if head + tail.len() >= self.settings.n_ctx {
+                let message = format!(
+                    "question {qid:?}: image/state prefix and question exceed {} context positions",
+                    self.settings.n_ctx
+                );
+                return Err(ollaya_decision::Error::invalid(message).into());
+            }
+            let common = prefix_tail
+                .iter()
+                .zip(&tail)
+                .take_while(|(a, b)| a == b)
+                .count();
+            shared = shared.min(common);
+            rows.push((q, tail));
+        }
+        let positions = head_positions + shared;
         self.clear(&mut ctx);
         let result = (|| {
-            chunks.evaluate(ctx.ptr.as_ptr())?;
+            chunks.evaluate_head(ctx.ptr.as_ptr())?;
+            self.decode(&mut ctx, &prefix_tail[..shared], head_positions, false)?;
             let mut output = Vec::with_capacity(rows.len());
             let mut input_tokens = 0;
-            for (q, suffix) in rows {
+            for (q, tail) in rows {
+                let suffix = &tail[shared..];
                 // SAFETY: this request owns the context lock; retain only its image/state prefix.
                 if !unsafe {
                     (self.handles.api.llama_memory_seq_rm)(ctx.memory, 0, positions as i32, -1)
                 } {
                     return Err(model_error("could not retain image prefix"));
                 }
-                self.decode(&mut ctx, &suffix, positions, true)?;
+                self.decode(&mut ctx, suffix, positions, true)?;
                 // SAFETY: decode produced vocabulary logits for the final suffix token.
                 let ptr = unsafe { (self.handles.api.llama_get_logits_ith)(ctx.ptr.as_ptr(), -1) };
                 if ptr.is_null() {
