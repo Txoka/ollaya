@@ -110,3 +110,25 @@ accuracy claim. Metal, Windows and Winnow-12B vision need separate runtime valid
 image server has not been compared: this branch uses the primary GGUF reference from ADR 0003,
 stock pinned llama-server with Winnow's rendered image prompt and a fixed shared-prefix plan.
 It makes no claim of image parity against the author's separate prefix/suffix tokenization plan.
+
+## Review follow-up (2026-10-02)
+
+The image prefix now decodes and preprocesses each image once per request.
+Question tails are tokenized as complete text segments with their state tail,
+retaining mtmd's synthetic image delimiter IDs and the original whitespace
+boundary behavior. Vision encoding/batching and logits readout are unchanged.
+The projector receives the exact ggml device selected for the text model.
+Projector initialization joins the automatic GPU-to-CPU fallback boundary;
+the GPU model is dropped before the CPU replacement is allocated. Explicit
+device requests still return failures.
+
+CUDA stock-reference parity remains 65/65 across 21 requests, maximum normalized
+logit error 9.5502737e-06, with unchanged goldens and tolerance. Native HTTP
+checks pass for multiple images including 16, invalid-input recovery, text
+compatibility and unloading. Four new unit tests cover text-tail delimiter/merge
+preservation and projector-failure fallback/drop/error behavior. Workspace
+tests, rustfmt and clippy pass. Physical multi-GPU validation is unavailable on
+the single-4070 test machine.
+
+CPU stock-reference parity also passes 65/65 across the same 21 requests,
+maximum normalized logit error 1.1467874e-05 (unchanged goldens and tolerance).

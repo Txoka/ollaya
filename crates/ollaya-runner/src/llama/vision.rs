@@ -159,7 +159,7 @@ impl Vision {
         dir: &Path,
         projector: &Path,
         model: *const c_void,
-        gpu: bool,
+        device: super::ffi::Device,
         threads: i32,
     ) -> Result<Self, Error> {
         let api = Api::load(dir)?;
@@ -167,7 +167,8 @@ impl Vision {
         // SAFETY: model and path outlive initialization; returned handle owned here.
         let ptr = unsafe {
             let mut params = (api.defaults)();
-            params.use_gpu = gpu;
+            params.use_gpu = !device.is_null();
+            params.device = device;
             params.n_threads = threads;
             params.warmup = false;
             NonNull::new((api.init)(path.as_ptr(), model, params))

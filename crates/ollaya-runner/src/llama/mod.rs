@@ -162,6 +162,7 @@ struct Context {
 /// The model and its context; freed together.
 struct Handles {
     api: &'static Api,
+    device: Option<ffi::Device>,
     model: NonNull<c_void>,
     context: Mutex<Context>,
 }
@@ -705,7 +706,7 @@ impl LlamaModel {
             &libs.dir,
             projector,
             self.handles.model.as_ptr(),
-            self.device != "cpu",
+            self.handles.device.unwrap_or(std::ptr::null_mut()),
             threads.map_or_else(default_threads, |t| t as i32),
         )?);
         Ok(())
@@ -737,15 +738,22 @@ impl LlamaModel {
         // Projector and llama context share this mutex; no cache is reused between image requests.
         let chunks = vision.prefix(&prefix, images)?;
         let (head_positions, prefix_tail) = chunks.tail()?;
+        // mtmd tokenizes the text after the final image separately from synthetic image
+        // delimiters. Keep those delimiter IDs and retokenize only the actual text tail
+        // together with each question, preserving whitespace merges without reprocessing images.
+        let text_tail = prefix
+            .rsplit_once("<__media__>")
+            .ok_or_else(|| model_error("missing image marker"))?
+            .1;
+        let text_ids = self.vocab.tokenize(text_tail, false, true)?;
         let mut shared = prefix_tail.len();
         let mut rows = Vec::with_capacity(prompts.len());
         for (qid, q) in prompts {
-            let full = vision.prefix(&(prefix.clone() + &q.suffix), images)?;
-            let (head, tail) = full.tail()?;
-            if head != head_positions {
-                return Err(model_error("image prefix changed between questions"));
-            }
-            if head + tail.len() >= self.settings.n_ctx {
+            let question_ids =
+                self.vocab
+                    .tokenize(&(text_tail.to_owned() + &q.suffix), false, true)?;
+            let tail = replace_image_text_tail(&prefix_tail, &text_ids, question_ids)?;
+            if head_positions + tail.len() >= self.settings.n_ctx {
                 let message = format!(
                     "question {qid:?}: image/state prefix and question exceed {} context positions",
                     self.settings.n_ctx
@@ -1263,6 +1271,7 @@ fn load_on(
     }
     Ok(Handles {
         api,
+        device,
         model,
         context: Mutex::new(Context {
             ptr: ctx,
@@ -1281,6 +1290,23 @@ pub fn split_point(ids: &[Token], reference: &[Token]) -> usize {
         .take_while(|(a, b)| a == b)
         .count();
     lcp.min(ids.len().saturating_sub(1))
+}
+
+/// Preserve mtmd's synthetic image delimiters while replacing its final text segment.
+fn replace_image_text_tail(
+    prefix: &[Token],
+    text: &[Token],
+    question: Vec<Token>,
+) -> Result<Vec<Token>, Error> {
+    let Some(delimiters) = prefix.strip_suffix(text) else {
+        return Err(model_error(
+            "multimodal text tail differs from standalone tokenization",
+        ));
+    };
+    let mut tail = Vec::with_capacity(delimiters.len() + question.len());
+    tail.extend_from_slice(delimiters);
+    tail.extend(question);
+    Ok(tail)
 }
 
 impl crate::engine::Engine for LlamaModel {
@@ -1316,6 +1342,15 @@ impl crate::engine::Engine for LlamaModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_tail_preserves_delimiters_and_retokenized_boundary() {
+        assert_eq!(
+            replace_image_text_tail(&[900, 1, 2], &[1, 2], vec![1, 3, 4]).unwrap(),
+            vec![900, 1, 3, 4]
+        );
+        assert!(replace_image_text_tail(&[900, 1, 2], &[1, 7], vec![1, 3]).is_err());
+    }
 
     #[test]
     fn split_point_leaves_a_token_to_evaluate() {
