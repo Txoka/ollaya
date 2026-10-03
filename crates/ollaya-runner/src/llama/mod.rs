@@ -789,6 +789,9 @@ impl LlamaModel {
                 if ptr.is_null() {
                     return Err(model_error("llama.cpp returned no logits"));
                 }
+                // SAFETY: the non-null row contains n_vocab contiguous f32 logits from the
+                // final suffix token. The context lock keeps it alive and prevents another
+                // decode from invalidating it while these logits are read.
                 let logits = unsafe { std::slice::from_raw_parts(ptr, self.vocab.n_tokens) };
                 let selected = q
                     .label_ids

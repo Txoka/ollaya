@@ -8,6 +8,9 @@ use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::path::Path;
 use std::ptr::NonNull;
 
+// Mirrors mtmd_context_params in the pinned b11146 tools/mtmd/mtmd.h (llama.cpp
+// v0.5.0). The load-time llama_version check enforces the libllama version pin;
+// libmtmd must be loaded from that same release so this layout matches its ABI.
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct Params {
