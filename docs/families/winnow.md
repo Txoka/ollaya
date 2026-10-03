@@ -169,76 +169,61 @@ typed-decisions test, 2,000 decisions.
 - **Options.** 2–64 alternatives and 1–256 questions. Probabilities are conditional on the options.
 - **Calibration.** Temperature 1.0, uncalibrated by the authors' own statement (typed-decisions ECE 0.157).
 - **Memory.** 12.67 GB Q8 weights; a 16 GB GPU is the tested floor.
-- **Vision.** Images (`winnow.images`, mmproj) are outside the TypeSafe core and not covered by v1.
+- **Vision.** `winnow:e4b-vision` reads PNG images through the author's E4B projector (below). The text tags,
+  `/v1/*` and Winnow-12B's projector stay text only.
 
+## Images (`winnow:e4b-vision`, #52)
 
-## Opt-in PNG image decisions
+The tag is `e4b` (the same GGUF, decision and calibration) plus the author's unmodified projector from the same
+pinned revision, `gguf/mmproj-Winnow-E4B.gguf` (990,372,672 bytes, sha256 `ddf46c21…6170a51`). The runner loads
+`libmtmd` from the pinned llama.cpp release next to `libllama`; installs from before this feature lack it. The
+text tags keep their downloads and their inference path.
 
-The `e4b-vision` manifest in this branch extends `e4b` with the author's unmodified
-`gguf/mmproj-Winnow-E4B.gguf` from the same pinned Hugging Face revision. Its SHA256 is
-`ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51` (990,372,672 bytes).
-This tag requires registry publication by the maintainer before `ollaya pull winnow:e4b-vision`
-works against the public registry. Existing text tags and default downloads stay unchanged.
+- **Requests.** `images` on `/api/decide` (base64 PNGs or base64 `data:` URLs) or `--image` in the CLI, up to 16
+  per request, in order. `/v1/systemone` keeps TypeSafe's text-only schema.
+- **Prompt.** Winnow's image prompt: the images in order before the escaped state. Their positions count against
+  the 8,192-token context. Every non-causal image chunk must fit the 512-token microbatch; a larger one is rejected
+  with a hint to resize.
+- **Evaluation plan.** As stock llama-server tokenizes a multimodal prompt, the state and question are tokenized
+  together after the last image, unlike the text plan above (tokenized apart they give other tokens and fail
+  parity). The runner evaluates the images and the state once per request and each question from that fixed
+  split, and encodes compatible images in one batch as llama-server does. Nothing is cached between requests.
+- **Logs.** libmtmd's debug messages contain whole prompts, so only its warnings and errors reach Ollaya's log,
+  at every log level.
+- **Calibration.** E4B's text temperature is kept. Image calibration and visual accuracy are not measured.
 
-The runner loads `libmtmd` alongside `libllama` from the same pinned llama.cpp release.
-Run `scripts/llama-cpp.sh` for your platform to stage both libraries; older installations that
-omit `libmtmd` must update their runtime libraries. A projector must match its language model.
-The loader supports Winnow projectors; the supplied opt-in manifest and GPU validation cover E4B.
+### Parity (measured 2026-10-02 by the contributor)
 
-Use the native `/api/decide` endpoint, with the normal `model`, `state`, and `questions` fields,
-and an `images` array containing base64 PNGs (or base64 data URLs). The CLI's existing `--image`
-option also forwards a PNG. `/v1/systemone` keeps its existing text-only schema.
-For example, after publishing/installing the opt-in manifest:
+Against stock llama-server b11146 (`7fe450e`) with the projector, on each device, 2,048-token context, the
+unchanged 1e-3 gate on normalized option logits:
 
-```json
-{
-  "model": "winnow:e4b-vision",
-  "state": "Inspect the supplied image.",
-  "images": ["<base64 PNG bytes>"],
-  "questions": {
-    "color": {
-      "type": "choice",
-      "instructions": "What is the dominant color in the image?",
-      "criteria": {"red": "Red", "green": "Green", "blue": "Blue"}
-    }
-  }
-}
-```
-
-Images appear in order before the escaped state, following the author's image prompt.
-Their positions count against the context budget. The image/state prefix is evaluated once per
-request and reused across that request's question suffixes. Image requests clear their cache
-between requests; no-image requests keep the existing text inference path.
-
-Only PNG still images are accepted, up to 16 per request, within the existing decoder size limit.
-Noncausal image chunks must also fit the runner's 512-token microbatch; larger chunks are rejected
-with a resize hint. Audio, video, and remote image fetching are outside this implementation.
-The existing text calibration is retained; it has not been refitted or validated for image questions.
-
-### Evaluation plan and parity
-
-Image prompts use stock llama-server's full-string multimodal tokenization. Unlike the text-only
-plan above, the state/question whitespace boundary is tokenized together: separately tokenizing
-those strings produces different tokens and fails image parity. The runner identifies the shared
-text tail after the final image, evaluates the image/state prefix once, and evaluates each question
-from that fixed split. Image encoding batches subsequent compatible images as stock llama-server
-does; independently encoding each image also fails multi-image parity. The text-only path is unchanged.
-
-On Linux, E4B Q8_0 with its matching projector passed the unchanged `1e-3` normalized option-logit
-gate against stock llama-server b11146 on each device:
-
-| Device | Image requests / questions | Decisions | Max normalized option-logit error |
+| Device | Image requests / questions | Decisions | Max option-logit difference |
 |---|---|---|---|
-| RTX 4070 CUDA | 21 / 65 | 65/65 | 9.55e-6 |
-| x86-64 CPU | 21 / 65 | 65/65 | 1.15e-5 |
+| RTX 4070, CUDA (Linux) | 21 / 65 | 65/65 | 9.55e-6 |
+| x86-64 CPU (Linux) | 21 / 65 | 65/65 | 1.15e-5 |
 
-The image fixtures use a 2,048-token context. Native HTTP tests also pass with the shipped
-8,192-token manifest. They cover base64/data URLs, multiple images, malformed inputs, count and context limits, text-only
-compatibility and unloading. All 505 existing text questions (123 requests, 15 rejected) also pass
-against a stock reference replayed on the RTX 4070, max error 1.14e-5.
-These are runtime parity checks, not visual accuracy or image calibration benchmarks.
-Metal, Windows, and Winnow-12B vision have not been validated.
+- **Coverage.** All three question types, several questions per request, image order reversed, changed and
+  repeated images, objects, arrays, Unicode and escaped control tokens in the state, images of different sizes.
+  Over HTTP with the shipped 8,192-token context: 2 and 16 images, malformed inputs, too many images, context
+  overflow, a request after a rejection, text-only requests and unloading.
+- **Text regression.** The 505 text questions (123 requests, 15 rejected) pass against stock llama-server replayed on
+  the RTX 4070: max option-logit difference 1.14e-5, probabilities within 2.3e-6.
+- **Not run yet.** The RTX 4090, Metal, Windows and Winnow-12B's projector.
 
-See [the measurement and reproduction report](../measurements/winnow-e4b-vision.md).
-No weights or generated goldens are committed; image fixtures are generated deterministically.
-The normal workspace tests, strict Clippy checks, packaging tests and site build pass.
+```bash
+# Reference: stock llama-server of the pinned build, then the runner on the same device.
+llama-server -m Winnow-E4B-Q8_0.gguf --mmproj mmproj-Winnow-E4B.gguf --host 127.0.0.1 --port 11439 \
+    -c 2048 -np 1 --cache-ram 0 --ctx-checkpoints 0 -b 2048 -ub 512 --fit off --no-ui --offline \
+    --swa-full -ngl all --device CUDA0          # CPU: -ngl 0 --device none --no-mmproj-offload
+PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_parity export http://127.0.0.1:11439 \
+    decision.json vision-goldens-cuda.json
+ollaya runner --gguf Winnow-E4B-Q8_0.gguf --decision decision.json --mmproj mmproj-Winnow-E4B.gguf \
+    --llama-dir LIBRARY_DIR --device cuda:0
+PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_parity check http://127.0.0.1:RUNNER_PORT \
+    vision-goldens-cuda.json
+# HTTP checks against a daemon with the vision tag and a text-only copy of e4b:
+PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_http http://127.0.0.1:11438 \
+    winnow:e4b-vision winnow:e4b-text
+# No prompt text in debug logs (runner started with OLLAYA_LOG=debug, output in RUNNER_LOG):
+PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_logs http://127.0.0.1:RUNNER_PORT RUNNER_LOG
+```

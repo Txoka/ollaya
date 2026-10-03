@@ -391,6 +391,14 @@ CATALOG = {
                          "Winnow-E4B (Gemma 4 E4B IT fine-tune), Q8_0 GGUF on llama.cpp: option-label logits "
                          "after Winnow's own prompt, with the author's fitted temperature.",
                          "7.5B", ["multilingual"], notice="NOTICE"),
+            # Opt-in images: e4b's GGUF, decision and calibration plus the author's matching projector from the
+            # same revision, read through libmtmd. The text tags keep their downloads and inference path.
+            "e4b-vision": dict(_gguf("winnow-e4b-q8_0", "EldanRing/Winnow-E4B", "734302fe5fbfeb3f21a7ece62653c9539be4aaf3",
+                                     "gguf/Winnow-E4B-Q8_0.gguf",
+                                     "Winnow E4B Q8_0 with the author's matching vision projector: PNG image decisions "
+                                     "through libmtmd.",
+                                     "7.5B", ["multilingual"], notice="NOTICE"),
+                               mmproj="gguf/mmproj-Winnow-E4B.gguf"),
         },
         "aliases": {"latest": "12b"},
         "parity": "PARITY-PENDING",
@@ -531,11 +539,4 @@ CATALOG = {
                   "CUDA (RTX 4090): 593 questions, every decision the same, option logits within 7.7e-6 and "
                   "probabilities within 1.6e-6. The prompts are byte-identical to the author's jevk5.prompt.",
     },
-}
-
-# Opt-in vision tag: the text tags keep their downloads and execution unchanged.
-CATALOG["winnow"]["tags"]["e4b-vision"] = {
-    **CATALOG["winnow"]["tags"]["e4b"],
-    "mmproj": "gguf/mmproj-Winnow-E4B.gguf",
-    "description": "Winnow E4B Q8_0 with the author's matching vision projector; PNG image decisions through libmtmd.",
 }
