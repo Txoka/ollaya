@@ -192,23 +192,25 @@ text tags keep their downloads and their inference path.
   at every log level.
 - **Calibration.** E4B's text temperature is kept. Image calibration and visual accuracy are not measured.
 
-### Parity (measured 2026-10-02 by the contributor)
+### Parity (measured 2026-10-02 by the contributor, 2026-10-05 by Ollaya)
 
-Against stock llama-server b11146 (`7fe450e`) with the projector, on each device, 2,048-token context, the
-unchanged 1e-3 gate on normalized option logits:
+Against stock llama-server b11146 (`7fe450e`) with the projector, on each device, the unchanged 1e-3 gate on
+normalized option logits. The contributor ran a 2,048-token context, Ollaya the shipped 8,192:
 
 | Device | Image requests / questions | Decisions | Max option-logit difference |
 |---|---|---|---|
 | RTX 4070, CUDA (Linux) | 21 / 65 | 65/65 | 9.55e-6 |
 | x86-64 CPU (Linux) | 21 / 65 | 65/65 | 1.15e-5 |
+| RTX 5090, CUDA (Linux) | 21 / 65 | 65/65 | 9.53e-6 |
 
 - **Coverage.** All three question types, several questions per request, image order reversed, changed and
   repeated images, objects, arrays, Unicode and escaped control tokens in the state, images of different sizes.
   Over HTTP with the shipped 8,192-token context: 2 and 16 images, malformed inputs, too many images, context
   overflow, a request after a rejection, text-only requests and unloading.
 - **Text regression.** The 505 text questions (123 requests, 15 rejected) pass against stock llama-server replayed on
-  the RTX 4070: max option-logit difference 1.14e-5, probabilities within 2.3e-6.
-- **Not run yet.** The RTX 4090, Metal, Windows and Winnow-12B's projector.
+  each GPU: on the RTX 4070, max option-logit difference 1.14e-5, probabilities within 2.3e-6; on the RTX 5090,
+  1.14e-5 and 2.8e-6.
+- **Not run yet.** Metal, Windows and Winnow-12B's projector.
 
 ```bash
 # Reference: stock llama-server of the pinned build, then the runner on the same device.
