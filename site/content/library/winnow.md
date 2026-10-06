@@ -9,7 +9,7 @@ Winnow is a pair of open decision models by EldanRing, fine-tuned from Google De
 | `winnow:latest`, `winnow:12b` | Gemma 4 12B IT | Q8_0 GGUF, 12.7 GB | 85.7 % | 81.5 % |
 | `winnow:e4b` | Gemma 4 E4B IT | Q8_0 GGUF, 8.0 GB | 80.5 % | 72.7 % |
 | `winnow:e4b-vision` | Gemma 4 E4B IT, with the vision projector | Q8_0 GGUF, 8.0 GB, and a 990 MB projector | – | – |
-| `winnow:12b-vision` (pending packaging) | Gemma 4 12B IT, with the vision projector | Q8_0 GGUF, 12.7 GB, and a 175 MB projector | – | – |
+| `winnow:12b-vision` | Gemma 4 12B IT, with the vision projector | Q8_0 GGUF, 12.7 GB, and a 175 MB projector | – | – |
 
 The accuracies are the author's, measured with the author's server on the same Q8_0 files (model cards of [Winnow-12B](https://huggingface.co/EldanRing/Winnow-12B) and [Winnow-E4B](https://huggingface.co/EldanRing/Winnow-E4B)). For comparison, the author reports 85.7 % and 87.0 % for Jev 1.13 on the same two sets. On typed-decisions (all 400 states, argmax against the majority label), measured by Ollaya, `winnow:12b` scores 0.702 and `winnow:e4b` 0.722. With its speed, that makes `winnow:e4b` Ollaya's recommended model.
 
@@ -38,7 +38,7 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `winn
 
 ## Limits
 
-- **Size.** These are large language models. `winnow:12b` needs about 14 GB of GPU memory and `winnow:e4b` about 9 GB at the 8,192-token context; on the CPU they are much slower than the encoder models.
+- **Size.** These are large language models. `winnow:12b` needs about 14 GB of GPU memory and `winnow:e4b` about 9 GB at the 8,192-token context; on the CPU they are much slower than the encoder models. `winnow:12b-vision` needs about 0.4 GB more: on an RTX 5090, CUDA context included, it peaked at 16,263 MiB against 15,877 MiB for `winnow:12b`, so a 16 GB GPU is marginal for it.
 - **Context.** State, question and options share 8,192 tokens. A longer state is cut to 6,144 tokens.
 - **Options.** 2 to 64 options per question and up to 256 questions per request. Probabilities are conditional on the options offered.
 - **Images.** The vision tags read images: up to 16 PNGs per request, sharing the 8,192-token context with the state. `/v1/*` and the other tags are text only.
@@ -47,15 +47,14 @@ Point any TypeSafe client at `http://localhost:11435` and set the model to `winn
 
 `winnow:e4b-vision` is `winnow:e4b` with the author's matching vision projector (990 MB): it answers questions about PNG images as well as the state. It needs Ollaya 0.10.0 or newer.
 
-`winnow:12b-vision` uses the same image path with `winnow:12b` and its matching 175 MB projector. Its registry tag is pending release packaging; adding the catalog entry does not publish it. The Q8_0 weights alone exceed a 12 GB GPU, so use a larger GPU or the CPU.
+`winnow:12b-vision` is `winnow:12b` with its own matching projector (175 MB), read the same way. It also needs Ollaya 0.10.0 or newer, and more GPU memory than `winnow:12b` (see Limits).
 
 ```shell
 ollaya run winnow:e4b-vision --image shelf.png --questions '{"blocked":{"type":"noul","instructions":"Is the aisle blocked?"}}' "A photo from the warehouse camera."
 ```
 
 - **How.** Winnow's own image prompt, with the images in order before the state, tokenized and evaluated as stock llama.cpp does, and the same option-label readout as the text tags. The images and the state are evaluated once per request.
-- **E4B parity.** On Linux, the image path matches stock llama-server of the pinned build on 21 requests and 65 questions, on an RTX 4070 and on the CPU, with option logits within 1.2e-5 (the gate is 1e-3).
-- **12B parity.** On Linux CPU, the matching 12B projector passes the same 21 requests and 65 questions against its own stock reference: 65/65 decisions, option-logit differences within 7.66e-6 at the unchanged 1e-3 gate. Native API checks cover 16 images, rejection recovery, text-only regression and unloading. CUDA parity for 12B is not measured.
+- **Parity.** On Linux, the image path matches stock llama-server of the pinned build on 21 requests and 65 questions, with option logits within 1.2e-5 (the gate is 1e-3): `winnow:e4b-vision` on an RTX 4070, an RTX 5090 and the CPU, `winnow:12b-vision` on an RTX 5090 and the CPU.
 - **Not measured yet.** Image calibration (each model's text temperature is kept), visual accuracy, Metal and Windows image parity.
 
 ## Weights and license

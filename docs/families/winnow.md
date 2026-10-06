@@ -168,24 +168,23 @@ typed-decisions test, 2,000 decisions.
 - **Architecture.** Gemma 4 only. The prompt hard-codes Gemma 4 control tokens.
 - **Options.** 2–64 alternatives and 1–256 questions. Probabilities are conditional on the options.
 - **Calibration.** Temperature 1.0, uncalibrated by the authors' own statement (typed-decisions ECE 0.157).
-- **Memory.** 12.67 GB Q8 weights; a 16 GB GPU is the tested floor.
+- **Memory.** 12.67 GB Q8 weights; a 16 GB GPU is the tested floor. `winnow:12b-vision` peaked at 16,263 MiB on
+  an RTX 5090 (below), so a 16 GB GPU is marginal for it.
 - **Vision.** `winnow:e4b-vision` and `winnow:12b-vision` read PNG images through their matching author's
   projectors (below). The text tags and `/v1/*` stay text only.
 
-## Images (`winnow:e4b-vision` and `winnow:12b-vision`)
+## Images (`winnow:e4b-vision`, #52; `winnow:12b-vision`, #59)
 
-Each vision tag keeps its corresponding text tag's GGUF, decision and calibration, adding the author's
-unmodified projector from the same pinned revision:
+Each vision tag is its text tag (the same GGUF, decision and calibration) plus the author's unmodified projector
+from the same pinned revision:
 
 | Tag | Projector | Bytes | SHA256 |
 |---|---|---:|---|
 | `e4b-vision` | `gguf/mmproj-Winnow-E4B.gguf` | 990,372,672 | `ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51` |
 | `12b-vision` | `gguf/mmproj-Winnow-12B.gguf` | 175,115,840 | `91f086971e56d7a7d8d39e271873fccdb49541bd259d6e02c401a4f1cb7a219e` |
 
-The text tags and the `latest` alias do not acquire a projector. No registry manifest is checked in ahead of
-packaging: the release publishes the tag together with its configuration blob. The runner loads
-`libmtmd` from the pinned llama.cpp release next to `libllama`; installs from before this feature lack it. The
-text tags keep their downloads and their inference path.
+The runner loads `libmtmd` from the pinned llama.cpp release next to `libllama`; installs from before this
+feature lack it. The text tags and `latest` keep their downloads and their inference path, without a projector.
 
 - **Requests.** `images` on `/api/decide` (base64 PNGs or base64 `data:` URLs) or `--image` in the CLI, up to 16
   per request, in order. `/v1/systemone` keeps TypeSafe's text-only schema.
@@ -201,25 +200,31 @@ text tags keep their downloads and their inference path.
 - **Calibration.** Each model keeps its text temperature (E4B: 1.2574; 12B: 1). Image calibration and visual
   accuracy are not measured. The 12B prompt keeps its configured empty thought block; E4B omits it.
 
-### E4B parity (measured 2026-10-02 by the contributor, 2026-10-05 by Ollaya)
+### Parity (measured 2026-10-02 and 2026-10-03 by the contributor, 2026-10-05 and 2026-10-06 by Ollaya)
 
-Against stock llama-server b11146 (`7fe450e`) with the projector, on each device, the unchanged 1e-3 gate on
-normalized option logits. The contributor ran a 2,048-token context, Ollaya the shipped 8,192:
+Against stock llama-server b11146 (`7fe450e`) with the matching projector, on each device, the unchanged 1e-3
+gate on normalized option logits. The contributor ran a 2,048-token context, Ollaya the shipped 8,192:
 
-| Device | Image requests / questions | Decisions | Max option-logit difference |
-|---|---|---|---|
-| RTX 4070, CUDA (Linux) | 21 / 65 | 65/65 | 9.55e-6 |
-| x86-64 CPU (Linux) | 21 / 65 | 65/65 | 1.15e-5 |
-| RTX 5090, CUDA (Linux) | 21 / 65 | 65/65 | 9.53e-6 |
+| Model | Device | Image requests / questions | Decisions | Max option-logit difference |
+|---|---|---|---|---|
+| e4b | RTX 4070, CUDA (Linux) | 21 / 65 | 65/65 | 9.55e-6 |
+| e4b | x86-64 CPU (Linux) | 21 / 65 | 65/65 | 1.15e-5 |
+| e4b | RTX 5090, CUDA (Linux) | 21 / 65 | 65/65 | 9.53e-6 |
+| 12b | x86-64 CPU (Linux) | 21 / 65 | 65/65 | 7.66e-6 |
+| 12b | RTX 5090, CUDA (Linux) | 21 / 65 | 65/65 | 7.61e-6 |
 
 - **Coverage.** All three question types, several questions per request, image order reversed, changed and
-  repeated images, objects, arrays, Unicode and escaped control tokens in the state, images of different sizes.
-  Over HTTP with the shipped 8,192-token context: 2 and 16 images, malformed inputs, too many images, context
-  overflow, a request after a rejection, text-only requests and unloading.
+  repeated images, objects, arrays, Unicode and escaped control tokens in the state, images of different sizes;
+  every request also matches stock's count of context positions. Over HTTP with the shipped 8,192-token context,
+  for both models: 2 and 16 images, malformed inputs, too many images, context overflow, a request after a
+  rejection, text-only requests against the matching text tag, and unloading.
 - **Text regression.** The 505 text questions (123 requests, 15 rejected) pass against stock llama-server replayed on
-  each GPU: on the RTX 4070, max option-logit difference 1.14e-5, probabilities within 2.3e-6; on the RTX 5090,
-  1.14e-5 and 2.8e-6.
-- **Not run yet.** Metal and Windows image parity. For 12B, see the validation below.
+  each GPU. e4b: on the RTX 4070, max option-logit difference 1.14e-5, probabilities within 2.3e-6; on the
+  RTX 5090, 1.14e-5 and 2.8e-6. 12b on the RTX 5090: 1.08e-5 and 2.3e-6.
+- **Memory.** On the RTX 5090, CUDA context included: `12b-vision` 16,243 MiB once loaded and 16,263 MiB at the
+  peak, with 16 images in one request; `winnow:12b` 15,877 MiB. A 16 GB GPU is marginal for `12b-vision`, and
+  a 12 GB one cannot hold it.
+- **Not run yet.** Metal, Windows and Linux ARM image parity, and the 505 text questions of 12b on the CPU.
 
 ```bash
 # Reference: stock llama-server of the pinned build, then the runner on the same device.
@@ -239,44 +244,6 @@ PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_http http://1
 PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_logs http://127.0.0.1:RUNNER_PORT RUNNER_LOG
 ```
 
-### Winnow-12B validation (measured 2026-10-03 by the contributor)
-
-Against its own stock llama-server b11146 (`7fe450e`) on x86-64 Linux CPU, Q8_0 and the matching 12B
-projector, 2,048-token context, with the same unchanged 1e-3 normalized option-logit gate:
-
-| Device | Image requests / questions | Decisions | Max option-logit difference |
-|---|---|---|---|
-| x86-64 CPU (Linux) | 21 / 65 | 65/65 | 7.66e-6 |
-
-- **Coverage.** The same image cases as E4B: choice, noul and score, several questions per request, image
-  order, changed and repeated images, objects, arrays, Unicode, escaped control tokens and different sizes.
-  Every request also matches stock's context-position count.
-- **Native API.** At the shipped 8,192-token context: PNG and data URL equivalence, 2 and 16 images,
-  malformed base64 and PNGs, 17-image rejection, context overflow and recovery, image-free requests matching
-  the text-only 12B tag, rejection of images by that text tag, and unloading. All pass.
-- **Logs.** A successful image request at debug level exposes neither state/question markers nor mtmd prompt
-  or tensor dumps.
-- **Packaging.** Real `package.py` output against the pinned author metadata preserves every text layer and
-  adds only the verified projector layer. Outputs were isolated; no manifest or blob was published.
-- **Not run.** CUDA, Metal, Windows and Linux ARM image parity; the full 505-question 12B text suite on CPU.
-  Image calibration and visual accuracy are not measured. This is a parity check, not an accuracy benchmark.
-
-### Winnow-12B reproduction
-
-Use the released `winnow:12b` decision configuration, keeping `thought: true`, temperature 1 and the pinned
-Q8_0 GGUF. For the 2,048-token parity run, change only `llama.n_ctx` to 2048 in a local copy of `decision.json`.
-Use the commands above with `Winnow-12B-Q8_0.gguf`, `mmproj-Winnow-12B.gguf` and that configuration. Run the
-CPU reference with `-ngl 0 --device none --no-mmproj-offload`, and the Ollaya runner with `--device cpu`.
-The goldens must be generated on that same device; do not replay E4B or CUDA goldens against the 12B CPU runner.
-
-For the native API suite, install the `winnow:12b-vision` and `winnow:12b` tags in an isolated store
-using `package.py` and the shipped 8,192-token configuration; then run:
-
-```bash
-PYTHONPATH=convert python -m unittest discover -s convert/tests -p test_winnow_projector_package.py
-PYTHONPATH=convert python -m ollaya_convert.families.winnow.vision_http http://127.0.0.1:11438 \
-    winnow:12b-vision winnow:12b
-```
-
-The 12B Q8_0 weights alone are 12,669,646,592 bytes, exceeding a 12 GB GPU before context, activations and the
-projector. CPU validation does not establish CUDA parity; a larger GPU must run its own stock reference.
+For 12b, the same commands with `Winnow-12B-Q8_0.gguf`, `mmproj-Winnow-12B.gguf` and `winnow:12b`'s shipped
+`decision.json` (`thought: true`; for a 2,048-token run change only `llama.n_ctx`), and
+`winnow:12b-vision winnow:12b` for the HTTP checks. Goldens come from the same model on the same device.
