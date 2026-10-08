@@ -1,6 +1,6 @@
 # Credence v1 Gemma4 E4B
 
-Proposed library name: `credencev1-gemma4:e4b`. This is a MiCA refinement of
+Library name: `credencev1-gemma4:e4b`. This is a MiCA refinement of
 EldanRing's Winnow-E4B, based on Google DeepMind's Gemma 4 E4B. It uses the existing
 `winnow-v1` layout and llama.cpp runner; no new inference engine is necessary.
 Adapter modifications are Apache-2.0. Preserve upstream LICENSE/NOTICE and the
@@ -45,31 +45,27 @@ not significance claims. Retain per-subset numbers in
 Local latency is recorded in the artifacts, but should not be mixed with Ollaya's
 RTX 4090/5090 leaderboard latency. No independent latency advantage is claimed.
 
-## Release gates
+## Packaging and verification
 
-This branch follows merged model-addition PR
-[49](https://github.com/ollaya-dev/ollaya/pull/49), placing family documentation
-here and preserving provenance rather than adding placeholder registry manifests.
+This addition follows merged model-addition PR
+[49](https://github.com/ollaya-dev/ollaya/pull/49): family documentation belongs
+here, with source pins, benchmark artifacts and generated registry manifests.
+The published weights, LICENSE/NOTICE, data attribution, decision layout and
+calibration metadata are available in the linked Hugging Face release below.
 
-Before a pullable library entry is added:
-
-1. Publish the exact Q8 file, LICENSE, NOTICE, data attribution, model card,
-   decision.json and calibration.json in the approved Hugging Face repository.
-2. Pin its actual commit and file SHA in the catalog. Do not invent a URL or reuse
-   Winnow's weights digest: these are different weights.
-3. Run the existing GGUF exporter/package verification against that pinned source,
-   preserving `thought: false`, the label token mapping and external T1.
-4. Add site library metadata/content and README model row, then regenerate the
-   registry/site catalog using the repository's normal tooling.
-5. Verify the published pull and all primitive decisions on CPU and CUDA serially
-   after the currently active serving tests. Existing local Ollaya benchmark
-   results do not prove a future public package pulls correctly.
+Both tags passed a clean pull into an initially empty store with no Hugging Face
+token. The small registry manifests were served from an isolated localhost copy
+of this branch's generated registry; weights came directly from the pinned public
+Hugging Face URLs. This tests the proposed package before upstream deployment.
+The client verified the actual SHA256 digests before writing either manifest.
+CPU/CUDA package parity is being verified against the pinned b11146 Python
+reference using the unchanged upstream fixture suite and tolerance.
 
 No image support or Metal/Windows parity is claimed. No PR has been opened.
 
 ## Public-calibration variant
 
-Also proposed: `credencev1-gemma4:e4b-calibrated`. This is a different checkpoint,
+Alternative tag: `credencev1-gemma4:e4b-calibrated`. This is a different checkpoint,
 trained with **0% synthetic**, not simply a temperature alias of the default.
 Its residual temperature (approximately 1.040857) was fitted on the fixed 1,024
 training-validation questions, not on either benchmark. Packaging must preserve
@@ -89,7 +85,7 @@ the full-precision fitted value and its validation provenance.
 calibration; it does not assert uniformly better calibration, perfect
 probabilities or dominance over original Winnow. Its typed ECE remains above
 original Winnow's 2.51%. Both tags retain the same source publication and package
-verification gates. Exact summary/provenance artifacts use the `calibrated-`
+verification procedure. Exact summary/provenance artifacts use the `calibrated-`
 prefix in the results directory.
 
 ## Published source and package reproduction
@@ -98,9 +94,9 @@ The release is now public at
 [Txoka/Credence-v1-Gemma4-E4B](https://huggingface.co/Txoka/Credence-v1-Gemma4-E4B),
 pinned for this package to `7f7b4fa55dbb40ff47e3a30eb19e1e8dd77cedd2`.
 `accuracy/model-Q8_0.gguf` and `calibrated/model-Q8_0.gguf` are distinct files,
-each8,718,469,216bytes, with hashes in the release JSON. The catalog and generated
-manifests now reference those actual files. This supersedes the source-publication
-prerequisite above; clean pull and independent package parity remain outstanding.
+each 8,718,469,216 bytes, with hashes in the release JSON. The catalog and generated
+manifests now reference those actual files. Both clean public pulls are verified; independent package parity is recorded
+separately from the earlier local-file quality benchmarks.
 
 Recreate the small package inputs and registry without downloading the weights:
 

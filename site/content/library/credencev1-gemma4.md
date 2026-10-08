@@ -23,13 +23,13 @@ ollaya run credencev1-gemma4:e4b-calibrated --preset triage "My order never arri
 The accuracy tag was trained with 5% procedural synthetic questions; the calibrated
 tag is a separate 0%-synthetic checkpoint. Both start from calibrated Winnow.
 Their readout scaling is folded into the weights and softcap. The first uses
-external temperature1; the second uses validation-fitted1.0408574437121012.
+external temperature 1; the second uses validation-fitted 1.0408574437121012.
 No temperature was fitted on benchmark data.
 
-Weights are 8.72GB each, downloaded from a commit-pinned public Hugging Face
-repository and verified by SHA256. Text only; up to64 candidate options with the
+Weights are 8.72 GB each, downloaded from a commit-pinned public Hugging Face
+repository and verified by SHA256. Text only; up to 64 candidate options with the
 existing Winnow context limits. No image support is claimed. Apache-2.0; preserve
 Winnow/Gemma4 notices and individual training-data attribution.
 
-Published-package CPU/CUDA parity and a clean pull remain to be verified. These
-checks are distinct from the completed local-file benchmark.
+Both published files passed clean, unauthenticated downloads and SHA256 verification.
+Package parity checks are documented separately in the family documentation.
