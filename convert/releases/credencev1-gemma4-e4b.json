@@ -1,0 +1,26 @@
+{
+  "name": "credencev1-gemma4:e4b",
+  "family": "winnow",
+  "layout": "winnow-v1",
+  "checkpoint": "synth05-hardreal2-clip-25-s002500-T1calibrated",
+  "quantization": "Q8_0",
+  "gguf_sha256": "c80a2320a02e79ed77a1b49b7e8a2f55a1ea1d295dbd791aebded6b68bb465e0",
+  "gguf_bytes": 8718469216,
+  "adapter_sha256": "fc622e9f574badd930da77a288ed5752ea52a035f9541269b8232875cd893ce3",
+  "external_temperature": 1.0,
+  "license": "Apache-2.0",
+  "source_publication": {
+    "status": "required before catalog registration",
+    "repo": null,
+    "revision": null,
+    "path": "Credence-v1-Gemma4-E4B-Q8_0.gguf"
+  },
+  "benchmark_artifacts": {
+    "credence-provenance.json": "77c2b9b6ed98a610734b308762889b60e86aff88f3be8f0797f44b95ea87d1c4",
+    "credence-public-summary.json": "14287c3876c77d079bfc722100f3471470ae761cb0a5607c8cc8d9ed467e1171",
+    "credence-typed-summary.json": "d9f496c8a26dfc28b8527f628833fa15f5f76643fefd85b9963f1a10574aa539",
+    "original-provenance.json": "1689560091a7116d42bd06a30ecc67368cbaadbe1b3d1b09605e697cf989d3fa",
+    "original-public-summary.json": "80fd8424c233b78f47dfe76e34895cd559ec0f4c83bfa6bd74c460249dbd9855",
+    "original-typed-summary.json": "aea700291c8d8e9d22b187415ed66b3e4d7a00400abb895815f6b04100ccbe51"
+  }
+}
