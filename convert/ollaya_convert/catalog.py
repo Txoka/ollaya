@@ -441,15 +441,25 @@ CATALOG = {
                         "individual training-data attribution.\n\n" + LICENSE_APACHE,
         "tags": {
             "e4b": _gguf("credencev1-gemma4-accuracy", "Txoka/Credence-v1-Gemma4-E4B",
-                         "7f7b4fa55dbb40ff47e3a30eb19e1e8dd77cedd2", "accuracy/model-Q8_0.gguf",
+                         "7d5ffc84145f34a3a76f7074e8c70bf1c1efce56", "accuracy/model-Q8_0.gguf",
                          "Credence v1 Gemma4 E4B, Q8_0, accuracy-focused MiCA checkpoint; folded calibration, "
                          "external temperature 1. Typed calibration is worse than original Winnow.",
                          "7.5B", ["multilingual"], notice="accuracy/NOTICE"),
             "e4b-calibrated": _gguf("credencev1-gemma4-calibrated", "Txoka/Credence-v1-Gemma4-E4B",
-                         "7f7b4fa55dbb40ff47e3a30eb19e1e8dd77cedd2", "calibrated/model-Q8_0.gguf",
+                         "7d5ffc84145f34a3a76f7074e8c70bf1c1efce56", "calibrated/model-Q8_0.gguf",
                          "Credence v1 Gemma4 E4B, Q8_0, separate zero-synthetic checkpoint with "
                          "validation-fitted temperature; stronger public calibration, lower public accuracy.",
                          "7.5B", ["multilingual"], notice="calibrated/NOTICE"),
+            "e4b-vision": dict(_gguf("credencev1-gemma4-accuracy", "Txoka/Credence-v1-Gemma4-E4B",
+                         "7d5ffc84145f34a3a76f7074e8c70bf1c1efce56", "accuracy/model-Q8_0.gguf",
+                         "Credence v1 Gemma4 E4B accuracy-focused, Q8_0 with unchanged Gemma vision projector.",
+                         "7.5B", ["multilingual"], notice="accuracy/NOTICE"),
+                         mmproj="vision/mmproj-Gemma4-E4B-F16.gguf"),
+            "e4b-calibrated-vision": dict(_gguf("credencev1-gemma4-calibrated", "Txoka/Credence-v1-Gemma4-E4B",
+                         "7d5ffc84145f34a3a76f7074e8c70bf1c1efce56", "calibrated/model-Q8_0.gguf",
+                         "Credence v1 Gemma4 E4B validation-calibrated, Q8_0 with unchanged Gemma vision projector.",
+                         "7.5B", ["multilingual"], notice="calibrated/NOTICE"),
+                         mmproj="vision/mmproj-Gemma4-E4B-F16.gguf"),
         },
         "aliases": {"latest": "e4b"},
         "parity": "Uses the existing winnow-v1 layout and llama runner. Local Q8 benchmarks completed "

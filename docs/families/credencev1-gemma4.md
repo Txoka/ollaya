@@ -130,3 +130,54 @@ OLLAYA_LIBRARY_PATH=/path/to/lib/ollaya cargo run --release -p ollaya-runner --e
 The website typecheck, 180-page build and link check pass. Local preview uses
 `OLLAYA_ALLOW_MISSING_BLOBS=1` because 153 unrelated existing registry blobs are
 absent from this checkout; both new packages' derived blobs are present.
+
+## Image input
+
+The separate vision packages reuse the exact unchanged F16 projector shipped
+with Winnow E4B. Winnow's model card states that vision and audio modules stayed
+frozen while its language tensors were trained; Credence's MiCA runs were
+text-only. No multimodal training is claimed.
+
+| Tag | Language checkpoint | Projector |
+|---|---|---|
+| `credencev1-gemma4:e4b-vision` | Same as `e4b` | Frozen Gemma4 E4B F16 |
+| `credencev1-gemma4:e4b-calibrated-vision` | Same as `e4b-calibrated` | Same projector |
+
+Projector: `vision/mmproj-Gemma4-E4B-F16.gguf` in the Credence HF repository,
+990,372,672 bytes, SHA256
+`ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51`.
+Its bytes match the pinned Winnow artifact. Source/base revisions and publication
+pin are recorded in `convert/releases/credencev1-gemma4-e4b.json`.
+
+The vision tags add one projector layer to the text packages; language weights
+and decision/calibration configurations are shared. Text tags remain available
+without downloading a projector. Image requests use the existing Winnow runtime
+path described in [Winnow image documentation](winnow.md).
+
+Both variants match stock llama-server b11146 on CPU, each on 21 image
+requests / 65 decisions. Maximum conditional log-probability errors are
+7.43e-6 (accuracy) and 7.62e-6 (calibrated), under the unchanged 1e-3 gate.
+These comparisons use external temperature 1 to isolate runtime parity.
+The calibrated package retains its external text-validation temperature.
+The generated-color, multi-image ordering, repeat-request and escaped-state
+fixtures test runtime parity, not broad visual reasoning accuracy. Text-only
+calibration temperatures are not validated as image-specific calibration.
+
+Image parity proof is recorded in
+`convert/releases/credencev1-gemma4-vision-verification.json`. To reproduce,
+start stock llama-server b11146 with the selected language GGUF and the pinned
+projector (`--mmproj`), then export and check fixtures using the existing tool:
+
+```shell
+python -m ollaya_convert.families.winnow.vision_parity export http://127.0.0.1:REFERENCE_PORT /path/to/decision.json /tmp/vision.json
+python -m ollaya_convert.families.winnow.vision_parity check http://127.0.0.1:RUNNER_PORT /tmp/vision.json
+```
+
+Run the Ollaya runner with the same language weights, projector and decision
+configuration. Use CPU for both sides to reproduce the recorded result.
+
+Both vision tags also passed unauthenticated pulls into an empty store. The
+projector and both language files came from the pinned public HF revision and
+passed digest verification. For this pre-publication check, only unpublished
+Ollaya metadata-blob URLs were redirected to a local copy of this branch's
+registry; language/projector URLs were unchanged.

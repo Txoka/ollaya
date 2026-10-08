@@ -1,0 +1,9 @@
+{
+  "temperature": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "temperature_by_options": {},
+  "source": "checkpoint-bound calibration folded into output weights and softcap; no test fitting"
+}

@@ -27,10 +27,19 @@ external temperature 1; the second uses validation-fitted 1.0408574437121012.
 No temperature was fitted on benchmark data.
 
 Weights are 8.72 GB each, downloaded from a commit-pinned public Hugging Face
-repository and verified by SHA256. Text only; up to 64 candidate options with the
-existing Winnow context limits. No image support is claimed. Apache-2.0; preserve
+repository and verified by SHA256. Text tags support up to 64 candidate options with the existing Winnow context
+limits. Separate vision tags add the projector described below. Apache-2.0; preserve
 Winnow/Gemma4 notices and individual training-data attribution.
 
 Both published files passed clean, unauthenticated downloads and SHA256 verification.
 Both packages also pass the upstream CPU/CUDA parity suite. Exact evidence and
 reproduction instructions are in the family documentation.
+
+## Vision variants
+
+The stacked vision addition provides `e4b-vision` and
+`e4b-calibrated-vision`, using the same language checkpoints plus Winnow's
+unchanged Gemma4 E4B F16 projector. Winnow kept vision weights frozen, and
+Credence training used text only. Both variants pass CPU image runtime parity
+against stock llama-server (65 decisions each); no broad vision-accuracy or
+image-calibration improvement is claimed.
