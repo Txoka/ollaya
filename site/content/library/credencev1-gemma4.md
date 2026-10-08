@@ -32,4 +32,5 @@ existing Winnow context limits. No image support is claimed. Apache-2.0; preserv
 Winnow/Gemma4 notices and individual training-data attribution.
 
 Both published files passed clean, unauthenticated downloads and SHA256 verification.
-Package parity checks are documented separately in the family documentation.
+Both packages also pass the upstream CPU/CUDA parity suite. Exact evidence and
+reproduction instructions are in the family documentation.

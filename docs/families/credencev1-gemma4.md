@@ -58,8 +58,13 @@ token. The small registry manifests were served from an isolated localhost copy
 of this branch's generated registry; weights came directly from the pinned public
 Hugging Face URLs. This tests the proposed package before upstream deployment.
 The client verified the actual SHA256 digests before writing either manifest.
-CPU/CUDA package parity is being verified against the pinned b11146 Python
-reference using the unchanged upstream fixture suite and tolerance.
+Both packages pass CPU and CUDA parity against the pinned b11146 Python
+reference: all 505 questions per device, unchanged edge cases plus 40 typed
+states, truncation and twin-question cases, and the original 1e-3 log-softmax
+tolerance. Token IDs, shared-prefix split points, candidates, rejections and
+calibrated selections are checked. Exact reference metadata, fixture hashes and
+probability differences are recorded in
+`results/credencev1-gemma4/package-verification.json`.
 
 No image support or Metal/Windows parity is claimed. No PR has been opened.
 
@@ -109,3 +114,19 @@ The helper checks the published decision layout, expected GGUF hash and full
 calibration values, then rebinds source metadata to the published byte-identical
 weights. Packaging verifies HF's actual LFS digest/size against that pin. The
 site build on Node22.17 requires `NODE_OPTIONS=--experimental-strip-types`.
+
+To reproduce parity, generate each device's fixtures with
+`python -m ollaya_convert.families.llm_common.export_llama winnow` using the
+pinned release file, `--td 40`, and `--device cpu` or `CUDA0`. Use
+`--temperature 1` for the accuracy tag or `--temperature 1.0408574437121012`
+for the calibrated tag. Then run the upstream checker against the packaged
+`decision.json`, `calibration.json` and the cleanly pulled `model.gguf`:
+
+```shell
+OLLAYA_LIBRARY_PATH=/path/to/lib/ollaya cargo run --release -p ollaya-runner --example parity_llama -- /path/to/package /path/to/goldens-cpu.jsonl cpu
+OLLAYA_LIBRARY_PATH=/path/to/lib/ollaya cargo run --release -p ollaya-runner --example parity_llama -- /path/to/package /path/to/goldens-cuda.jsonl cuda
+```
+
+The website typecheck, 180-page build and link check pass. Local preview uses
+`OLLAYA_ALLOW_MISSING_BLOBS=1` because 153 unrelated existing registry blobs are
+absent from this checkout; both new packages' derived blobs are present.
