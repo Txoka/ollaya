@@ -430,6 +430,31 @@ CATALOG = {
                   "are within 4.4e-4 and probabilities within 4.7e-5 on x86-64 CPU and CUDA; on Apple silicon's CPU "
                   "one of the 653 rows is 1.1e-3 off, and every decision is still the same.",
     },
+    "credencev1-gemma4": {
+        "namespace": "library",
+        "model": "credencev1-gemma4",
+        "family": "winnow",
+        "author": "Txoka",
+        "license": "Apache-2.0",
+        "license_text": "Credence v1 by Txoka, a MiCA refinement of EldanRing's Winnow-E4B "
+                        "on Google DeepMind's Gemma 4 E4B. Preserve upstream notices and "
+                        "individual training-data attribution.\n\n" + LICENSE_APACHE,
+        "tags": {
+            "e4b": _gguf("credencev1-gemma4-accuracy", "Txoka/Credence-v1-Gemma4-E4B",
+                         "7f7b4fa55dbb40ff47e3a30eb19e1e8dd77cedd2", "accuracy/model-Q8_0.gguf",
+                         "Credence v1 Gemma4 E4B, Q8_0, accuracy-focused MiCA checkpoint; folded calibration, "
+                         "external temperature 1. Typed calibration is worse than original Winnow.",
+                         "7.5B", ["multilingual"], notice="accuracy/NOTICE"),
+            "e4b-calibrated": _gguf("credencev1-gemma4-calibrated", "Txoka/Credence-v1-Gemma4-E4B",
+                         "7f7b4fa55dbb40ff47e3a30eb19e1e8dd77cedd2", "calibrated/model-Q8_0.gguf",
+                         "Credence v1 Gemma4 E4B, Q8_0, separate zero-synthetic checkpoint with "
+                         "validation-fitted temperature; stronger public calibration, lower public accuracy.",
+                         "7.5B", ["multilingual"], notice="calibrated/NOTICE"),
+        },
+        "aliases": {"latest": "e4b"},
+        "parity": "Uses the existing winnow-v1 layout and llama runner. Local Q8 benchmarks completed "
+                  "with zero errors; independent published-package CPU/CUDA parity remains pending.",
+    },
     "winnow": {
         "namespace": "library",
         "model": "winnow",

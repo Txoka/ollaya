@@ -182,6 +182,18 @@ const overlays: Record<string, ModelOverlay> = {
       '1.1': { summary: 'Von 1.1, ModernBERT-large, 0.447 on typed decisions; 8,192-token context.' },
     },
   },
+  'credencev1-gemma4': {
+    title: 'Credence v1 Gemma4',
+    description: 'MiCA refinements of Winnow-E4B on Gemma 4. Two Q8_0 variants trade public accuracy against calibration; neither dominates original Winnow on every metric.',
+    publisher: { name: 'Txoka', url: 'https://huggingface.co/Txoka/Credence-v1-Gemma4-E4B' },
+    capabilities: ['decision', 'fine-tuned', 'gguf'],
+    keywords: ['credence', 'gemma', 'winnow', 'mica', 'calibration', 'decision'],
+    tags: {
+      latest: { summary: 'Same as credencev1-gemma4:e4b.' },
+      e4b: { summary: 'Accuracy-focused Q8_0 checkpoint; external temperature 1.' },
+      'e4b-calibrated': { summary: 'Separate zero-synthetic checkpoint with validation-fitted temperature; stronger public calibration.' },
+    },
+  },
   winnow: {
     stats: { tag: 'winnow:e4b', accuracy: 0.722, latencyMs: 89 },
     title: 'Winnow',

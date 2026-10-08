@@ -10,10 +10,10 @@
   "external_temperature": 1.0,
   "license": "Apache-2.0",
   "source_publication": {
-    "status": "required before catalog registration",
-    "repo": null,
-    "revision": null,
-    "path": "Credence-v1-Gemma4-E4B-Q8_0.gguf"
+    "status": "published",
+    "repo": "Txoka/Credence-v1-Gemma4-E4B",
+    "revision": "7f7b4fa55dbb40ff47e3a30eb19e1e8dd77cedd2",
+    "path": "accuracy/model-Q8_0.gguf"
   },
   "benchmark_artifacts": {
     "calibrated-provenance.json": "8fa505e6cc4a55c4652472cd033e411cecd96cdc5409f772573b5bd8f91b325a",
@@ -37,10 +37,10 @@
       1.0408574437121012
     ],
     "source_publication": {
-      "status": "required before catalog registration",
-      "repo": null,
-      "revision": null,
-      "path": "Credence-v1-Gemma4-E4B-Calibrated-Q8_0.gguf"
+      "status": "published",
+      "repo": "Txoka/Credence-v1-Gemma4-E4B",
+      "revision": "7f7b4fa55dbb40ff47e3a30eb19e1e8dd77cedd2",
+      "path": "calibrated/model-Q8_0.gguf"
     },
     "validation_calibration": {
       "schema": 1,

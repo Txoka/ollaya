@@ -91,3 +91,25 @@ probabilities or dominance over original Winnow. Its typed ECE remains above
 original Winnow's 2.51%. Both tags retain the same source publication and package
 verification gates. Exact summary/provenance artifacts use the `calibrated-`
 prefix in the results directory.
+
+## Published source and package reproduction
+
+The release is now public at
+[Txoka/Credence-v1-Gemma4-E4B](https://huggingface.co/Txoka/Credence-v1-Gemma4-E4B),
+pinned for this package to `7f7b4fa55dbb40ff47e3a30eb19e1e8dd77cedd2`.
+`accuracy/model-Q8_0.gguf` and `calibrated/model-Q8_0.gguf` are distinct files,
+each8,718,469,216bytes, with hashes in the release JSON. The catalog and generated
+manifests now reference those actual files. This supersedes the source-publication
+prerequisite above; clean pull and independent package parity remain outstanding.
+
+Recreate the small package inputs and registry without downloading the weights:
+
+```shell
+python convert/releases/prepare_credence.py
+PYTHONPATH=convert python -m ollaya_convert.package credencev1-gemma4
+```
+
+The helper checks the published decision layout, expected GGUF hash and full
+calibration values, then rebinds source metadata to the published byte-identical
+weights. Packaging verifies HF's actual LFS digest/size against that pin. The
+site build on Node22.17 requires `NODE_OPTIONS=--experimental-strip-types`.
