@@ -66,3 +66,28 @@ Before a pullable library entry is added:
    results do not prove a future public package pulls correctly.
 
 No image support or Metal/Windows parity is claimed. No PR has been opened.
+
+## Public-calibration variant
+
+Also proposed: `credencev1-gemma4:e4b-calibrated`. This is a different checkpoint,
+trained with **0% synthetic**, not simply a temperature alias of the default.
+Its residual temperature (approximately 1.040857) was fitted on the fixed 1,024
+training-validation questions, not on either benchmark. Packaging must preserve
+the full-precision fitted value and its validation provenance.
+
+| Metric | Accuracy-focused tag | Public-calibration tag |
+|---|---:|---:|
+| Public macro accuracy | 74.1244% | 73.7228% |
+| Public pooled ECE | 5.4789% | 3.7426% |
+| Public Brier | 0.372403 | 0.369314 |
+| Typed accuracy | 72.35% | 72.20% |
+| Typed soft CE | 1.0655 | 1.0480 |
+| Typed NLL | 0.6872 | 0.7011 |
+| Typed ECE | 4.83% | 4.63% |
+
+“Calibrated” describes the validation-fitted release and stronger public
+calibration; it does not assert uniformly better calibration, perfect
+probabilities or dominance over original Winnow. Its typed ECE remains above
+original Winnow's 2.51%. Both tags retain the same source publication and package
+verification gates. Exact summary/provenance artifacts use the `calibrated-`
+prefix in the results directory.
