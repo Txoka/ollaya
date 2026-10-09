@@ -1,9 +1,0 @@
-{
-  "temperature": [
-    1.0408574437121012,
-    1.0408574437121012,
-    1.0408574437121012
-  ],
-  "temperature_by_options": {},
-  "source": "fixed training-validation fit, never benchmark fit"
-}

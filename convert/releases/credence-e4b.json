@@ -1,5 +1,5 @@
 {
-  "name": "credencev1-gemma4:e4b",
+  "name": "credence:e4b",
   "family": "winnow",
   "layout": "winnow-v1",
   "checkpoint": "synth05-hardreal2-clip-25-s002500-T1calibrated",
@@ -27,7 +27,7 @@
     "original-typed-summary.json": "aea700291c8d8e9d22b187415ed66b3e4d7a00400abb895815f6b04100ccbe51"
   },
   "calibrated_variant": {
-    "name": "credencev1-gemma4:e4b-calibrated",
+    "name": "credence:e4b-calibrated",
     "checkpoint": "synth00-hardreal2-clip-25-s002500-T1calibrated",
     "gguf_sha256": "7c557d65b7427007fe49d226c8e6b45e7ab59425a8c39747a28647e9440e7ed1",
     "adapter_sha256": "789bbdacdc6d65fa6455f67db618dd1acf25b5c726316f9feeb3e30cf204b797",
@@ -67,14 +67,16 @@
     }
   },
   "vision_projector": {
-    "repo": "Txoka/Credence-v1-Gemma4-E4B",
-    "revision": "7d5ffc84145f34a3a76f7074e8c70bf1c1efce56",
-    "path": "vision/mmproj-Gemma4-E4B-F16.gguf",
+    "repo": "EldanRing/Winnow-E4B",
+    "revision": "734302fe5fbfeb3f21a7ece62653c9539be4aaf3",
+    "path": "gguf/mmproj-Winnow-E4B.gguf",
     "sha256": "ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51",
     "bytes": 990372672,
-    "upstream_repo": "EldanRing/Winnow-E4B",
-    "upstream_revision": "734302fe5fbfeb3f21a7ece62653c9539be4aaf3",
-    "upstream_path": "gguf/mmproj-Winnow-E4B.gguf",
+    "credence_copy": {
+      "repo": "Txoka/Credence-v1-Gemma4-E4B",
+      "revision": "7d5ffc84145f34a3a76f7074e8c70bf1c1efce56",
+      "path": "vision/mmproj-Gemma4-E4B-F16.gguf"
+    },
     "base_model": "google/gemma-4-E4B-it",
     "base_revision": "ee0ef6023621cff504d758262d4e04895a5af4a2",
     "training": "Publisher states vision/audio modules remained frozen; reuse byte-identical F16 artifact."
